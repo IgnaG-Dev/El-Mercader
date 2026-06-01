@@ -1,0 +1,567 @@
+import { useState, useEffect, useRef } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useCartStore } from '../../store/cartStore'
+import { useAuthStore } from '../../store/authStore'
+import { useFinanceStore } from '../../store/financeStore'
+import { useCreateOrder } from '../../hooks/useOrders'
+import { cotizarAndreani } from '../../services/andreani'
+import Button from '../../components/ui/Button'
+
+function SectionCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="bg-surface-container rounded-xl border border-outline-variant/30 p-4 sm:p-6">
+      {children}
+    </div>
+  )
+}
+
+function SectionTitle({ icon, label }: { icon: string; label: string }) {
+  return (
+    <h2 className="font-headline text-xl sm:text-headline-md text-on-surface mb-4 flex items-center gap-2">
+      <span className="material-symbols-outlined text-primary">{icon}</span>
+      {label}
+    </h2>
+  )
+}
+
+interface PersonalForm {
+  name: string
+  email: string
+  phone: string
+  dni: string
+  password: string
+}
+
+interface ShippingForm {
+  street: string
+  city: string
+  province: string
+  postalCode: string
+}
+
+interface ShippingQuote {
+  cost: number
+  days: string
+  source: 'andreani' | 'zone'
+}
+
+const PROVINCES = [
+  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba',
+  'Corrientes', 'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja',
+  'Mendoza', 'Misiones', 'Neuquén', 'Río Negro', 'Salta', 'San Juan',
+  'San Luis', 'Santa Cruz', 'Santa Fe', 'Santiago del Estero',
+  'Tierra del Fuego', 'Tucumán',
+]
+
+const SHIPPING_ZONES: Record<string, { cost: number; days: string }> = {
+  'CABA':                 { cost: 8000,  days: '2-3 días hábiles' },
+  'Buenos Aires':         { cost: 12000, days: '4-6 días hábiles' },
+  'Córdoba':              { cost: 15000, days: '5-7 días hábiles' },
+  'Santa Fe':             { cost: 15000, days: '5-7 días hábiles' },
+  'Entre Ríos':           { cost: 16000, days: '6-8 días hábiles' },
+  'Mendoza':              { cost: 17000, days: '6-8 días hábiles' },
+  'San Luis':             { cost: 17000, days: '6-8 días hábiles' },
+  'La Pampa':             { cost: 17000, days: '6-8 días hábiles' },
+  'Tucumán':              { cost: 17000, days: '7-9 días hábiles' },
+  'Santiago del Estero':  { cost: 17000, days: '7-9 días hábiles' },
+  'Salta':                { cost: 18000, days: '7-9 días hábiles' },
+  'Jujuy':                { cost: 18000, days: '7-9 días hábiles' },
+  'Misiones':             { cost: 18000, days: '7-9 días hábiles' },
+  'Corrientes':           { cost: 18000, days: '7-9 días hábiles' },
+  'Chaco':                { cost: 18000, days: '7-9 días hábiles' },
+  'Catamarca':            { cost: 18000, days: '7-9 días hábiles' },
+  'La Rioja':             { cost: 18000, days: '7-9 días hábiles' },
+  'San Juan':             { cost: 18000, days: '7-9 días hábiles' },
+  'Formosa':              { cost: 19000, days: '8-10 días hábiles' },
+  'Neuquén':              { cost: 20000, days: '8-10 días hábiles' },
+  'Río Negro':            { cost: 21000, days: '9-11 días hábiles' },
+  'Chubut':               { cost: 22000, days: '10-12 días hábiles' },
+  'Santa Cruz':           { cost: 24000, days: '11-13 días hábiles' },
+  'Tierra del Fuego':     { cost: 27000, days: '12-15 días hábiles' },
+}
+
+function mapNominatimState(state: string): string {
+  const explicit: Record<string, string> = {
+    'Ciudad Autónoma de Buenos Aires': 'CABA',
+    'Ciudad de Buenos Aires':          'CABA',
+    'Autonomous City of Buenos Aires': 'CABA',
+    'Province of Buenos Aires':        'Buenos Aires',
+    'Provincia de Buenos Aires':       'Buenos Aires',
+  }
+  if (explicit[state]) return explicit[state]
+  if (PROVINCES.includes(state)) return state
+  const lower = state.toLowerCase()
+  return PROVINCES.find(p => p.toLowerCase() === lower) ?? ''
+}
+
+function extractStreet(addr: Record<string, string>): string {
+  // Try different road-type keys Nominatim uses for Argentine addresses
+  const roadName = addr.road ?? addr.pedestrian ?? addr.footway
+    ?? addr.cycleway ?? addr.path ?? addr.residential ?? ''
+  return [roadName, addr.house_number].filter(Boolean).join(' ')
+}
+
+export default function CheckoutPage() {
+  const { items, total, clearCart } = useCartStore()
+  const { user, isAuthenticated, register } = useAuthStore()
+  const { shippingCost: baseShippingCost, shippingDays: baseShippingDays, paymentMethods } = useFinanceStore()
+  const navigate = useNavigate()
+  const createOrder = useCreateOrder()
+
+  const enabledMethods = Object.entries(paymentMethods).filter(([, cfg]) => cfg.enabled)
+
+  const [personal, setPersonal] = useState<PersonalForm>({
+    name: user?.name ?? '',
+    email: user?.email ?? '',
+    phone: user?.phone ?? '',
+    dni: user?.dni ?? '',
+    password: '',
+  })
+  const [form, setForm] = useState<ShippingForm>({
+    street: '',
+    city: '',
+    province: '',
+    postalCode: '',
+  })
+  const defaultMethod = enabledMethods[0]?.[0] ?? 'transfer'
+  const [paymentMethod, setPaymentMethod] = useState(defaultMethod)
+  const [errors, setErrors] = useState<Partial<ShippingForm & PersonalForm>>({})
+  const [registerError, setRegisterError] = useState<string | null>(null)
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState<string | null>(null)
+  const [shippingQuote, setShippingQuote] = useState<ShippingQuote | null>(null)
+  const [shippingLoading, setShippingLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // When province changes recalculate immediately via zone table (instant feedback),
+  // then try Andreani once we also have a valid postal code
+  useEffect(() => {
+    if (!form.province) {
+      setShippingQuote(null)
+      return
+    }
+    const zone = SHIPPING_ZONES[form.province] ?? { cost: baseShippingCost, days: baseShippingDays }
+    setShippingQuote({ cost: zone.cost, days: zone.days, source: 'zone' })
+  }, [form.province, baseShippingCost, baseShippingDays])
+
+  // Debounce Andreani API call when postal code is ready
+  useEffect(() => {
+    const cp = form.postalCode.replace(/\D/g, '')
+    if (cp.length < 4) return
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setShippingLoading(true)
+      const result = await cotizarAndreani(cp)
+      setShippingLoading(false)
+      if (result) {
+        setShippingQuote({ cost: result.costo, days: result.diasHabiles, source: 'andreani' })
+      }
+      // If Andreani fails, the zone-based quote already set by the province effect remains
+    }, 600)
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [form.postalCode])
+
+  const handlePersonal = (field: keyof PersonalForm) => (e: ChangeEvent<HTMLInputElement>) =>
+    setPersonal((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const handleField = (field: keyof ShippingForm) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const handleGeolocate = async () => {
+    if (!navigator.geolocation) {
+      setGeoError('Tu navegador no soporta geolocalización.')
+      return
+    }
+    setGeoLoading(true)
+    setGeoError(null)
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+      )
+      const { latitude, longitude } = position.coords
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${latitude}&lon=${longitude}&accept-language=es`,
+      )
+      if (!res.ok) throw new Error('geocoding_failed')
+      const data = await res.json()
+      const addr: Record<string, string> = data.address ?? {}
+
+      const street     = extractStreet(addr)
+      const city       = addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.suburb ?? addr.quarter ?? ''
+      const postalCode = (addr.postcode ?? '').replace(/\s/g, '')
+      const province   = mapNominatimState(addr.state ?? '')
+
+      setForm(prev => ({ ...prev, street, city, postalCode, province }))
+      if (!province) setGeoError('Provincia no reconocida. Verificá o seleccionála manualmente.')
+    } catch (err) {
+      const isGeoError = err && typeof err === 'object' && 'code' in err
+      if (isGeoError && (err as GeolocationPositionError).code === 1) {
+        setGeoError('Permiso denegado. Habilitá el acceso a tu ubicación en el navegador.')
+      } else if (isGeoError) {
+        setGeoError('No se pudo obtener tu ubicación. Completá los campos manualmente.')
+      } else {
+        setGeoError('No se pudo obtener la dirección. Completá los campos manualmente.')
+      }
+    } finally {
+      setGeoLoading(false)
+    }
+  }
+
+  const validate = () => {
+    const e: Partial<ShippingForm & PersonalForm> = {}
+    if (!personal.name.trim()) e.name = 'Requerido'
+    if (!personal.email.trim()) e.email = 'Requerido'
+    else if (!/\S+@\S+\.\S+/.test(personal.email)) e.email = 'Email inválido'
+    if (!personal.phone.trim()) e.phone = 'Requerido'
+    if (!personal.dni.trim()) e.dni = 'Requerido'
+    if (!isAuthenticated && !personal.password.trim()) e.password = 'Requerido'
+    if (!form.street.trim()) e.street = 'Requerido'
+    if (!form.city.trim()) e.city = 'Requerido'
+    if (!form.province) e.province = 'Requerido'
+    if (!form.postalCode.trim()) e.postalCode = 'Requerido'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const handleOrder = async () => {
+    if (!validate()) return
+    setRegisterError(null)
+    try {
+      if (!isAuthenticated) {
+        try {
+          await register({
+            name: personal.name,
+            email: personal.email,
+            password: personal.password,
+            phone: personal.phone,
+            dni: personal.dni,
+          })
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : ''
+          if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+            setRegisterError('Este email ya tiene una cuenta. ¿Querés iniciar sesión?')
+          } else {
+            setRegisterError('No se pudo crear la cuenta. Intentá de nuevo.')
+          }
+          return
+        }
+      }
+
+      const orderId = await createOrder.mutateAsync({
+        items,
+        total: orderTotal,
+        paymentMethod,
+        shippingAddress: {
+          name: personal.name,
+          email: personal.email,
+          phone: personal.phone,
+          street: form.street,
+          city: form.city,
+          province: form.province,
+          postalCode: form.postalCode,
+        },
+      })
+      clearCart()
+      if (paymentMethod === 'transfer') {
+        navigate('/instrucciones-pago', { state: { orderId, total: orderTotal } })
+      } else {
+        navigate('/pago-mercadopago', { state: { orderId, total: orderTotal } })
+      }
+    } catch {
+      // error handled by mutation state
+    }
+  }
+
+  const mpFee = paymentMethod === 'mercadopago' ? Math.round(total * paymentMethods.mercadopago.fee / 100) : 0
+  const activeShippingCost = shippingQuote?.cost ?? 0
+  const orderTotal = total + activeShippingCost + mpFee
+
+  const inputClass = (field: keyof (ShippingForm & PersonalForm)) =>
+    `w-full border rounded-lg px-3 py-2.5 text-body-md bg-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
+      errors[field] ? 'border-error' : 'border-outline-variant focus:border-primary'
+    }`
+
+  return (
+    <div className="max-w-container-max mx-auto px-4 md:px-margin-desktop py-4 sm:py-8 md:py-12">
+
+      <h1 className="font-headline text-2xl sm:text-headline-lg text-primary mb-4 sm:mb-8">Finalizar Compra</h1>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+
+        {/* ── Left column: form ── */}
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+
+          {/* ── Datos personales ── */}
+          <SectionCard>
+            <SectionTitle icon="person" label="Datos personales" />
+
+            {isAuthenticated ? (
+              <p className="text-label-sm text-on-surface-variant mb-4 flex items-center gap-1">
+                <span className="material-symbols-outlined text-secondary" style={{ fontSize: '16px' }}>check_circle</span>
+                Tus datos de cuenta ya están cargados.
+              </p>
+            ) : (
+              <p className="text-label-sm text-on-surface-variant mb-4">
+                ¿Ya tenés cuenta?{' '}
+                <Link to="/login" className="text-primary font-bold hover:underline">Iniciá sesión</Link>
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {/* Nombre */}
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Nombre completo *</label>
+                <input value={personal.name} onChange={handlePersonal('name')} className={inputClass('name')} placeholder="Juan Pérez" readOnly={isAuthenticated} />
+                {errors.name && <span className="text-xs text-error">{errors.name}</span>}
+              </div>
+
+              {/* Email */}
+              <div className="flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Email *</label>
+                <input type="email" value={personal.email} onChange={handlePersonal('email')} className={inputClass('email')} placeholder="juan@mail.com" readOnly={isAuthenticated} />
+                {errors.email && <span className="text-xs text-error">{errors.email}</span>}
+              </div>
+
+              {/* Celular */}
+              <div className="flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Celular *</label>
+                <input value={personal.phone} onChange={handlePersonal('phone')} className={inputClass('phone')} placeholder="11 1234-5678" inputMode="tel" readOnly={isAuthenticated && !!user?.phone} />
+                {errors.phone && <span className="text-xs text-error">{errors.phone}</span>}
+              </div>
+
+              {/* DNI */}
+              <div className="flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">DNI *</label>
+                <input value={personal.dni} onChange={handlePersonal('dni')} className={inputClass('dni')} placeholder="12.345.678" inputMode="numeric" readOnly={isAuthenticated && !!user?.dni} />
+                {errors.dni && <span className="text-xs text-error">{errors.dni}</span>}
+              </div>
+
+              {/* Contraseña — solo para no registrados */}
+              {!isAuthenticated && (
+                <div className="sm:col-span-2 flex flex-col gap-1">
+                  <label className="text-label-sm font-bold text-on-surface">Contraseña *</label>
+                  <input type="password" value={personal.password} onChange={handlePersonal('password')} className={inputClass('password')} placeholder="Mínimo 6 caracteres" autoComplete="new-password" />
+                  {errors.password && <span className="text-xs text-error">{errors.password}</span>}
+                  <span className="text-xs text-on-surface-variant">Se creará tu cuenta para que puedas hacer seguimiento del pedido.</span>
+                </div>
+              )}
+            </div>
+
+            {registerError && (
+              <p className="text-error text-xs mt-3 flex items-start gap-1">
+                <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>error</span>
+                {registerError}{' '}
+                {registerError.includes('iniciar sesión') && (
+                  <Link to="/login" className="font-bold underline">Iniciar sesión</Link>
+                )}
+              </p>
+            )}
+          </SectionCard>
+
+          {/* ── Datos de envío ── */}
+          <SectionCard>
+            <SectionTitle icon="local_shipping" label="Datos de envío" />
+
+            {/* Geolocation autocomplete */}
+            <div className="mb-5">
+              <button
+                type="button"
+                onClick={handleGeolocate}
+                disabled={geoLoading}
+                className="flex items-center gap-2 text-sm text-primary font-bold border border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 active:bg-primary/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto justify-center sm:justify-start"
+              >
+                <span
+                  className={`material-symbols-outlined ${geoLoading ? 'animate-spin' : ''}`}
+                  style={{ fontSize: '18px' }}
+                >
+                  {geoLoading ? 'progress_activity' : 'my_location'}
+                </span>
+                {geoLoading ? 'Detectando ubicación...' : 'Usar mi ubicación actual'}
+              </button>
+              {geoError && (
+                <p className="text-xs text-error mt-2 flex items-start gap-1">
+                  <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>error</span>
+                  {geoError}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {/* Calle */}
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Calle y número *</label>
+                <input value={form.street} onChange={handleField('street')} className={inputClass('street')} placeholder="Av. Corrientes 1234" />
+                {errors.street && <span className="text-xs text-error">{errors.street}</span>}
+              </div>
+
+              {/* Ciudad */}
+              <div className="flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Ciudad *</label>
+                <input value={form.city} onChange={handleField('city')} className={inputClass('city')} placeholder="Buenos Aires" />
+                {errors.city && <span className="text-xs text-error">{errors.city}</span>}
+              </div>
+
+              {/* Código postal */}
+              <div className="flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Código postal *</label>
+                <div className="relative">
+                  <input
+                    value={form.postalCode}
+                    onChange={handleField('postalCode')}
+                    className={inputClass('postalCode')}
+                    placeholder="1043"
+                    inputMode="numeric"
+                  />
+                  {shippingLoading && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined animate-spin text-primary/60" style={{ fontSize: '16px' }}>
+                      progress_activity
+                    </span>
+                  )}
+                </div>
+                {errors.postalCode && <span className="text-xs text-error">{errors.postalCode}</span>}
+              </div>
+
+              {/* Provincia */}
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <label className="text-label-sm font-bold text-on-surface">Provincia *</label>
+                <select value={form.province} onChange={handleField('province')} className={inputClass('province')}>
+                  <option value="">Seleccioná una provincia</option>
+                  {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                {errors.province && <span className="text-xs text-error">{errors.province}</span>}
+                {shippingQuote && (
+                  <p className="text-xs text-secondary flex items-center gap-1 mt-1">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>local_shipping</span>
+                    {shippingQuote.source === 'andreani' ? (
+                      <>Costo Andreani:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                    ) : (
+                      <>Envío estimado a {form.province}:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Payment */}
+          <SectionCard>
+            <SectionTitle icon="payment" label="Método de pago" />
+            {enabledMethods.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">No hay métodos de pago disponibles.</p>
+            ) : (
+              <div className="space-y-3">
+                {enabledMethods.map(([key, cfg]) => {
+                  const META: Record<string, { logo?: string; label: string; icon: string; desc: string }> = {
+                    mercadopago: { logo: '/logos/mercadopago.png', label: 'Mercado Pago', icon: 'account_balance_wallet', desc: `Tarjetas, débito, cuotas sin interés · Comisión ${cfg.fee}%` },
+                    transfer:    { label: 'Transferencia bancaria', icon: 'account_balance', desc: 'Pago directo, sin comisión extra' },
+                  }
+                  const m = META[key]
+                  return (
+                    <label
+                      key={key}
+                      className={`flex items-center gap-3 p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors ${
+                        paymentMethod === key ? 'border-primary bg-primary-fixed/10' : 'border-outline-variant hover:border-primary/50'
+                      }`}
+                    >
+                      <input type="radio" name="payment" value={key} checked={paymentMethod === key} onChange={() => setPaymentMethod(key)} className="accent-primary flex-shrink-0" />
+                      {m.logo
+                        ? <img src={m.logo} alt={m.label} className="h-8 sm:h-10 w-auto flex-shrink-0" />
+                        : <span className="material-symbols-outlined text-primary flex-shrink-0">{m.icon}</span>
+                      }
+                      <div className="min-w-0">
+                        {!m.logo && <div className="font-bold text-label-bold text-on-surface">{m.label}</div>}
+                        <div className="text-xs sm:text-label-sm text-on-surface-variant">{m.desc}</div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </SectionCard>
+        </div>
+
+        {/* ── Right column: summary ── */}
+        <div className="lg:col-span-1">
+          <div className="bg-surface-container rounded-xl border border-outline-variant/30 p-4 sm:p-6 lg:sticky lg:top-24">
+            <h2 className="font-headline text-xl sm:text-headline-md text-on-surface mb-4">Resumen</h2>
+
+            {/* Items */}
+            <div className="space-y-2 sm:space-y-3 mb-4 max-h-40 sm:max-h-48 overflow-y-auto pr-1">
+              {items.map(({ product, quantity }) => (
+                <div key={product.id} className="flex items-center gap-2 sm:gap-3">
+                  <img src={product.image} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs sm:text-label-sm font-bold text-on-surface line-clamp-1">{product.name}</div>
+                    <div className="text-xs text-on-surface-variant">x{quantity}</div>
+                  </div>
+                  <span className="text-xs sm:text-label-sm font-bold text-on-surface whitespace-nowrap">
+                    ${(product.price * quantity).toLocaleString('es-AR')}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Totals */}
+            <div className="border-t border-outline-variant pt-3 sm:pt-4 space-y-2 mb-4 sm:mb-6">
+              <div className="flex justify-between text-sm text-on-surface-variant">
+                <span>Subtotal</span>
+                <span>${total.toLocaleString('es-AR')}</span>
+              </div>
+
+              <div className="flex justify-between text-sm text-on-surface-variant">
+                <span>
+                  Envío
+                  {shippingQuote && <span className="text-xs ml-1">· {shippingQuote.days}</span>}
+                </span>
+                {shippingLoading ? (
+                  <span className="text-xs italic text-on-surface-variant/60 flex items-center gap-1">
+                    <span className="material-symbols-outlined animate-spin" style={{ fontSize: '12px' }}>progress_activity</span>
+                    Calculando...
+                  </span>
+                ) : shippingQuote ? (
+                  <span>${activeShippingCost.toLocaleString('es-AR')}</span>
+                ) : (
+                  <span className="italic text-xs text-on-surface-variant/60">Ingresá tu destino</span>
+                )}
+              </div>
+
+              {mpFee > 0 && (
+                <div className="flex justify-between text-sm text-on-surface-variant">
+                  <span>Comisión MP ({paymentMethods.mercadopago.fee}%)</span>
+                  <span>${mpFee.toLocaleString('es-AR')}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between font-bold text-base sm:text-headline-md text-on-surface border-t border-outline-variant pt-2">
+                <span>Total</span>
+                {shippingQuote ? (
+                  <span>${orderTotal.toLocaleString('es-AR')}</span>
+                ) : (
+                  <span className="italic font-normal text-sm text-on-surface-variant/60">A calcular</span>
+                )}
+              </div>
+            </div>
+
+            {createOrder.isError && (
+              <p className="text-error text-xs sm:text-label-sm mb-4">Error al procesar el pedido. Intentá de nuevo.</p>
+            )}
+
+            <Button onClick={handleOrder} loading={createOrder.isPending} className="w-full" size="lg">
+              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>check_circle</span>
+              Confirmar pedido
+            </Button>
+
+            <p className="text-xs text-on-surface-variant text-center mt-3 flex items-center justify-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>lock</span>
+              Pago 100% seguro
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}

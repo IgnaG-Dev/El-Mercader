@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-body bg-background text-on-background;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+
+  .wood-texture {
+    background-color: #f3eddf;
+    background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+
+  .soft-lift {
+    box-shadow: 0 4px 12px rgba(60, 7, 0, 0.1);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .soft-lift:hover {
+    box-shadow: 0 8px 24px rgba(60, 7, 0, 0.15);
+    transform: translateY(-2px);
+  }
+
+  /* Add to cart animations */
+  @keyframes cart-bump {
+    0%   { transform: scale(1) rotate(0deg); }
+    25%  { transform: scale(1.4) rotate(-15deg); }
+    75%  { transform: scale(0.9) rotate(8deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+  @keyframes badge-pop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.6); }
+    100% { transform: scale(1); }
+  }
+  @keyframes float-up-fade {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+    20%  { opacity: 1; transform: translateX(-50%) translateY(-8px) scale(1.05); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-56px) scale(0.85); }
+  }
+  .cart-bump  { animation: cart-bump  0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards; }
+  .badge-pop  { animation: badge-pop  0.4s ease forwards; }
+  .float-chip { animation: float-up-fade 1.6s ease-out forwards; }
+}
