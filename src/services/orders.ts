@@ -33,6 +33,7 @@ function mapOrder(db: Record<string, unknown>): Order {
     createdAt: (db.created_at as string).split('T')[0],
     paymentMethod: (db.payment_method as string) ?? undefined,
     address: (db.shipping_address as Order['address']) ?? undefined,
+    receiptUrl: (db.receipt_url as string) ?? undefined,
   }
 }
 
@@ -106,6 +107,29 @@ export async function fetchAllOrdersAdmin(): Promise<Order[]> {
 export async function updateOrderStatus(id: string, status: Order['status']): Promise<void> {
   const { error } = await supabase.from('orders').update({ status }).eq('id', id)
   if (error) throw error
+}
+
+export async function uploadReceipt(orderId: string, file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autenticado')
+
+  const ext = file.name.split('.').pop()
+  const path = `${user.id}/${orderId}.${ext}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('receipts')
+    .upload(path, file, { upsert: true })
+  if (uploadError) throw uploadError
+
+  const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(path)
+
+  const { error } = await supabase.rpc('update_order_receipt_url', {
+    p_order_id: orderId,
+    p_receipt_url: publicUrl,
+  })
+  if (error) throw error
+
+  return publicUrl
 }
 
 export async function deleteOrder(id: string): Promise<void> {

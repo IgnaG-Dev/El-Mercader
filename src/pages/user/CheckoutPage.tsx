@@ -111,6 +111,8 @@ export default function CheckoutPage() {
 
   const enabledMethods = Object.entries(paymentMethods).filter(([, cfg]) => cfg.enabled)
 
+  const [showPassword, setShowPassword] = useState(false)
+
   const [personal, setPersonal] = useState<PersonalForm>({
     name: user?.name ?? '',
     email: user?.email ?? '',
@@ -343,7 +345,26 @@ export default function CheckoutPage() {
               {!isAuthenticated && (
                 <div className="sm:col-span-2 flex flex-col gap-1">
                   <label className="text-label-sm font-bold text-on-surface">Contraseña *</label>
-                  <input type="password" value={personal.password} onChange={handlePersonal('password')} className={inputClass('password')} placeholder="Mínimo 6 caracteres" autoComplete="new-password" />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={personal.password}
+                      onChange={handlePersonal('password')}
+                      className={`${inputClass('password')} pr-10`}
+                      placeholder="Mínimo 6 caracteres"
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute inset-y-0 right-3 flex items-center text-on-surface-variant hover:text-on-surface transition-colors"
+                      tabIndex={-1}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                        {showPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
                   {errors.password && <span className="text-xs text-error">{errors.password}</span>}
                   <span className="text-xs text-on-surface-variant">Se creará tu cuenta para que puedas hacer seguimiento del pedido.</span>
                 </div>

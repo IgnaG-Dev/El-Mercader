@@ -39,6 +39,7 @@ export interface Order {
   createdAt: string
   address?: Address
   paymentMethod?: string
+  receiptUrl?: string
 }
 
 export interface Address {

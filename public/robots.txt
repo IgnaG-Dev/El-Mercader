@@ -14,4 +14,4 @@ Disallow: /confirmacion-compra
 Disallow: /instrucciones-pago
 Disallow: /historial-pedidos
 
-Sitemap: https://elmercader.com.ar/sitemap.xml
+Sitemap: https://elmercader.vercel.app/sitemap.xml

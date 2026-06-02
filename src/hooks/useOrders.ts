@@ -6,6 +6,7 @@ import {
   updateOrderStatus,
   deleteOrder,
   createOrderAdmin,
+  uploadReceipt,
   type CreateOrderInput,
   type CreateOrderAdminInput,
 } from '../services/orders'
@@ -65,6 +66,17 @@ export function useCreateOrderAdmin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] })
       queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] })
+    },
+  })
+}
+
+export function useUploadReceipt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ orderId, file }: { orderId: string; file: File }) =>
+      uploadReceipt(orderId, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] })
     },
   })
 }

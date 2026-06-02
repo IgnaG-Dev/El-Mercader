@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useOrders } from '../../hooks/useOrders'
 import OrderStatusBadge from '../../components/ui/OrderStatusBadge'
 import OrderTracker from '../../components/ui/OrderTracker'
@@ -7,6 +7,8 @@ import type { Order } from '../../types'
 
 function OrderCard({ order }: { order: Order }) {
   const [expanded, setExpanded] = useState(false)
+  const navigate = useNavigate()
+  const isPending = order.status === 'pending'
 
   return (
     <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden">
@@ -40,16 +42,38 @@ function OrderCard({ order }: { order: Order }) {
           ))}
         </div>
 
-        {/* toggle button */}
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="mt-4 flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-            {expanded ? 'expand_less' : 'local_shipping'}
-          </span>
-          {expanded ? 'Ocultar seguimiento' : 'Ver seguimiento del paquete'}
-        </button>
+        {/* toggle + pay buttons */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="flex items-center gap-1.5 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              {expanded ? 'expand_less' : 'local_shipping'}
+            </span>
+            {expanded ? 'Ocultar seguimiento' : 'Ver seguimiento del paquete'}
+          </button>
+
+          {isPending && (
+            order.paymentMethod === 'mercadopago' ? (
+              <button
+                onClick={() => navigate('/pago-mercadopago', { state: { orderId: order.id, total: order.total } })}
+                className="flex items-center gap-1.5 text-sm font-bold text-white bg-[#009ee3] hover:bg-[#008ecc] transition-colors px-4 py-1.5 rounded-lg"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>account_balance_wallet</span>
+                Pagar con Mercado Pago
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/instrucciones-pago', { state: { orderId: order.id, total: order.total } })}
+                className="flex items-center gap-1.5 text-sm font-bold text-white bg-secondary hover:bg-secondary/90 transition-colors px-4 py-1.5 rounded-lg"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>account_balance</span>
+                Pagar por transferencia
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* ── Tracker panel ── */}

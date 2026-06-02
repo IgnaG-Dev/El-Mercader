@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import React, { useState, useRef } from 'react'
 import { useProductBySlug, useProducts } from '../../hooks/useProducts'
 import { useCartStore } from '../../store/cartStore'
@@ -17,12 +17,18 @@ export default function ProductDetailPage() {
   const [justAdded, setJustAdded] = useState(false)
   const addTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addItem = useCartStore((s) => s.addItem)
+  const navigate = useNavigate()
 
   const handleAddToCart = () => {
     addItem(product!, qty)
     setJustAdded(true)
     if (addTimerRef.current) clearTimeout(addTimerRef.current)
     addTimerRef.current = setTimeout(() => setJustAdded(false), 2200)
+  }
+
+  const handleBuyNow = () => {
+    addItem(product!, qty)
+    navigate('/finalizar-compra')
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -214,9 +220,10 @@ export default function ProductDetailPage() {
               </span>
             </div>
 
-            {/* Qty + Add to cart */}
-            <div className="flex items-center gap-3 mb-6 flex-wrap">
-              <div className="flex items-center border border-outline-variant rounded overflow-hidden flex-shrink-0">
+            {/* Qty + Buttons — mobile first */}
+            <div className="flex flex-col gap-3 mb-6">
+              {/* Quantity selector */}
+              <div className="flex items-center border border-outline-variant rounded overflow-hidden self-start">
                 <button
                   onClick={() => setQty((q) => Math.max(1, q - 1))}
                   className="px-3 py-2 bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface"
@@ -232,7 +239,8 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              <div className="relative flex-1 min-w-[160px]">
+              {/* Add to cart */}
+              <div className="relative w-full">
                 {justAdded && (
                   <div className="float-chip absolute left-1/2 bottom-full mb-2 pointer-events-none z-10">
                     <span className="bg-secondary text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg whitespace-nowrap">
@@ -256,6 +264,16 @@ export default function ProductDetailPage() {
                   {justAdded ? '¡Añadido!' : 'Añadir al carrito'}
                 </Button>
               </div>
+
+              {/* Buy now */}
+              <button
+                onClick={handleBuyNow}
+                disabled={product.stock === 0}
+                className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-lg border-2 border-primary text-primary font-bold text-body-md hover:bg-primary hover:text-on-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>bolt</span>
+                Comprar ahora
+              </button>
             </div>
 
             {/* Features & payment */}
