@@ -47,7 +47,7 @@ const COLUMNS: { label: string; col: string | null }[] = [
 
 const EMPTY_FORM: CreateProductInput = {
   name: '', price: 0, stock: 0, category: '',
-  description: '', badge: '', image_urls: [], active: true, volume_tiers: [],
+  description: '', badge: '', image_urls: [], active: true, volume_tiers: [], sale_ends_at: null,
 }
 
 type GroupMode = 'none' | 'category'
@@ -150,6 +150,7 @@ export default function AdminProducts() {
       image_urls: p.images?.length ? p.images : (p.image ? [p.image] : []),
       active: p.active ?? true,
       volume_tiers: p.volumeTiers ?? [],
+      sale_ends_at: p.saleEndsAt ?? null,
     })
     setFormError('')
     setEditProduct(p)
@@ -177,6 +178,7 @@ export default function AdminProducts() {
           active: form.active, badge: form.badge, description: form.description,
           image_urls: form.image_urls ?? [],
           volume_tiers: form.volume_tiers ?? [],
+          sale_ends_at: form.sale_ends_at ?? null,
         },
       })
       setEditProduct(null)
@@ -679,6 +681,26 @@ function ProductFormModal({
               tiers={form.volume_tiers ?? []}
               onChange={tiers => setForm(f => ({ ...f, volume_tiers: tiers }))}
             />
+
+            <div>
+              <label className="block text-xs font-bold text-on-surface-variant mb-1 flex items-center gap-1">
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>timer</span>
+                Oferta termina el (opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={form.sale_ends_at ? form.sale_ends_at.slice(0, 16) : ''}
+                onChange={e => setForm(f => ({ ...f, sale_ends_at: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+                className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary"
+              />
+              {form.sale_ends_at && (
+                <button type="button" onClick={() => setForm(f => ({ ...f, sale_ends_at: null }))}
+                  className="mt-1 text-xs text-error hover:underline flex items-center gap-0.5">
+                  <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>close</span>
+                  Quitar fecha de oferta
+                </button>
+              )}
+            </div>
 
             <label className="flex items-center gap-2 cursor-pointer">
               <input

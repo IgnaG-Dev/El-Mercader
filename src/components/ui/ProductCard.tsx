@@ -17,6 +17,8 @@ export default function ProductCard({ product }: Props) {
   const totalDiscount = paymentMethods.mercadopago.fee + serviceFee
   const hasDiscount = totalDiscount > 0 && paymentMethods.transfer.enabled
   const inflatedPrice = hasDiscount ? Math.round(product.price * (1 + totalDiscount / 100)) : product.price
+  const discountPct = hasDiscount ? Math.round((1 - product.price / inflatedPrice) * 100) : 0
+  const isSaleActive = product.saleEndsAt ? new Date(product.saleEndsAt) > new Date() : false
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -34,9 +36,25 @@ export default function ProductCard({ product }: Props) {
 
   return (
     <div className="bg-surface-container rounded-lg p-3 md:p-4 border border-outline-variant/30 soft-lift flex flex-col h-full relative group overflow-visible">
+      {/* Badge top-right */}
       {product.badge && (
         <div className="absolute top-2 right-2 bg-tertiary-fixed/20 text-on-tertiary-fixed text-label-sm font-bold px-2 py-1 rounded-full z-10 text-xs">
           {product.badge}
+        </div>
+      )}
+
+      {/* Discount % badge top-left */}
+      {discountPct > 0 && (
+        <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+          <span className="bg-primary text-on-primary text-xs font-bold px-1.5 py-0.5 rounded-full leading-tight">
+            -{discountPct}%
+          </span>
+          {isSaleActive && (
+            <span className="bg-error text-on-primary text-xs font-bold px-1.5 py-0.5 rounded-full leading-tight flex items-center gap-0.5">
+              <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>timer</span>
+              Oferta
+            </span>
+          )}
         </div>
       )}
 

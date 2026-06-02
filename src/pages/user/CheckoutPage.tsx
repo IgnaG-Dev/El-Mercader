@@ -253,8 +253,11 @@ export default function CheckoutPage() {
         postalCode: form.postalCode,
       })
 
-      // Save address to DB if authenticated and it doesn't already exist
-      if (isAuthenticated) {
+      // Save address to DB if authenticated and it doesn't already exist.
+      // Read from store directly to avoid the stale closure when the user
+      // just registered moments earlier in this same handler.
+      const currentIsAuthenticated = useAuthStore.getState().isAuthenticated
+      if (currentIsAuthenticated) {
         const alreadySaved = addresses?.some(
           (a) =>
             a.street.toLowerCase() === form.street.toLowerCase() &&
@@ -262,14 +265,18 @@ export default function CheckoutPage() {
             a.postalCode === form.postalCode,
         )
         if (!alreadySaved) {
-          createAddress.mutate({
-            label: form.city,
-            street: form.street,
-            city: form.city,
-            province: form.province,
-            postalCode: form.postalCode,
-            isDefault: !addresses?.length,
-          })
+          try {
+            await createAddress.mutateAsync({
+              label: form.city,
+              street: form.street,
+              city: form.city,
+              province: form.province,
+              postalCode: form.postalCode,
+              isDefault: !addresses?.length,
+            })
+          } catch {
+            // Address save failed — don't block checkout completion
+          }
         }
       }
 

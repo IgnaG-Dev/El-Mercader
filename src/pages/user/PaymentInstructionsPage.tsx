@@ -237,13 +237,12 @@ export default function PaymentInstructionsPage() {
         <div className="bg-surface-container rounded-xl border border-outline-variant/30 p-6 space-y-6">
           <div>
             <h2 className="font-headline text-headline-md text-on-surface mb-3">Datos bancarios</h2>
+
             <div className="space-y-2">
               {[
-                { label: 'Banco', value: 'Mercado Pago' },
-                { label: 'CVU', value: '0000003100047837528440' },
-                { label: 'Alias', value: 'ignacio.diego.gauto' },
-                { label: 'CUIT', value: '20-12345678-9' },
-                { label: 'Titular', value: 'El Mercader SRL' },
+                { label: 'Banco', value: 'Banco Galicia' },
+                { label: 'CBU', value: '0070074030004053945775' },
+                { label: 'Titular', value: 'Diego Ignacio Gauto' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between items-center py-2 border-b border-outline-variant/30 last:border-0">
                   <span className="text-label-sm text-on-surface-variant">{label}</span>

@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 import ProductCard from '../../components/ui/ProductCard'
 import SEO from '../../components/ui/SEO'
-import { useProducts } from '../../hooks/useProducts'
+import { useProducts, useBestSellers } from '../../hooks/useProducts'
 import { useCategories } from '../../hooks/useCategories'
+import { useRecentlyViewed } from '../../hooks/useRecentlyViewed'
 
 const BENTO_COLORS = [
   { text: 'text-primary' },
@@ -14,6 +15,12 @@ const BENTO_COLORS = [
 export default function HomePage() {
   const { data: products = [], isLoading } = useProducts()
   const { data: categories = [] } = useCategories()
+  const { products: bestSellers, isLoading: bsLoading } = useBestSellers(4)
+  const { ids: recentIds } = useRecentlyViewed()
+  const recentlyViewed = products
+    .filter((p) => recentIds.includes(p.id))
+    .sort((a, b) => recentIds.indexOf(a.id) - recentIds.indexOf(b.id))
+    .slice(0, 8)
   const featured = products.slice(0, 4)
 
   return (
@@ -99,6 +106,49 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {/* ── Más vendidos ── */}
+      <section className="py-10 md:py-14 px-4 md:px-margin-desktop max-w-container-max mx-auto">
+        <div className="flex justify-between items-center mb-5 md:mb-8 border-b border-outline-variant pb-4">
+          <h2 className="font-headline text-xl md:text-headline-md text-primary flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary" style={{ fontSize: '24px' }}>local_fire_department</span>
+            Más Vendidos
+          </h2>
+          <Link to="/tienda" className="font-bold text-label-bold text-secondary hover:underline flex items-center gap-1 text-sm">
+            Ver todos <span className="material-symbols-outlined text-sm">arrow_forward</span>
+          </Link>
+        </div>
+        {bsLoading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-gutter">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-surface-container rounded-lg border border-outline-variant/30 h-52 md:h-72 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-gutter">
+            {bestSellers.map((p) => <ProductCard key={p.id} product={p} />)}
+          </div>
+        )}
+      </section>
+
+      {/* ── Vistos recientemente ── */}
+      {recentlyViewed.length > 0 && (
+        <section className="py-8 md:py-10 px-4 md:px-margin-desktop max-w-container-max mx-auto">
+          <div className="flex justify-between items-center mb-4 border-b border-outline-variant pb-3">
+            <h2 className="font-headline text-xl md:text-headline-md text-primary flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary" style={{ fontSize: '22px' }}>history</span>
+              Vistos recientemente
+            </h2>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
+            {recentlyViewed.map((p) => (
+              <div key={p.id} className="flex-shrink-0 w-40 sm:w-48">
+                <ProductCard product={p} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Categories Bento ── */}
       {categories.length > 0 && (

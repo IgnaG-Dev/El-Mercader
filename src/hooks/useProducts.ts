@@ -8,8 +8,10 @@ import {
   deactivateProduct,
   createProduct,
   deleteProduct,
+  fetchBestSellerIds,
   type CreateProductInput,
 } from '../services/products'
+import type { Product } from '../types'
 
 export function useProducts(category?: string) {
   return useQuery({
@@ -73,6 +75,21 @@ export function useCreateProduct() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'products'] })
     },
   })
+}
+
+export function useBestSellers(limit = 6) {
+  const { data: allProducts = [], isLoading } = useProducts()
+  const { data: ids = [] } = useQuery({
+    queryKey: ['best-sellers', limit],
+    queryFn: () => fetchBestSellerIds(limit),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const products: Product[] = ids.length > 0
+    ? ids.map((id) => allProducts.find((p) => p.id === id)).filter((p): p is Product => !!p)
+    : allProducts.filter((p) => p.active !== false).slice(0, limit)
+
+  return { products, isLoading }
 }
 
 export function useDeleteProduct() {

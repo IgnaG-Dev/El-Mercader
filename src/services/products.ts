@@ -22,6 +22,7 @@ function mapProduct(db: Record<string, unknown>): Product {
     reviews: (db.reviews_count as number) ?? 0,
     active: db.active as boolean,
     volumeTiers: (db.volume_tiers as VolumeTier[] | null) ?? [],
+    saleEndsAt: (db.sale_ends_at as string | null) ?? null,
   }
 }
 
@@ -84,6 +85,7 @@ export async function updateProduct(
     description?: string
     image_urls?: string[]
     volume_tiers?: VolumeTier[]
+    sale_ends_at?: string | null
   }
 ): Promise<void> {
   const payload: Record<string, unknown> = { ...updates }
@@ -109,6 +111,24 @@ export interface CreateProductInput {
   image_urls?: string[]
   active?: boolean
   volume_tiers?: VolumeTier[]
+  sale_ends_at?: string | null
+}
+
+export async function fetchBestSellerIds(limit = 6): Promise<string[]> {
+  const { data: orders } = await supabase
+    .from('orders').select('id').neq('status', 'cancelled')
+  if (!orders?.length) return []
+
+  const { data: items } = await supabase
+    .from('order_items').select('product_id, quantity')
+    .in('order_id', orders.map((o) => o.id))
+  if (!items?.length) return []
+
+  const counts: Record<string, number> = {}
+  for (const item of items) {
+    if (item.product_id) counts[item.product_id] = (counts[item.product_id] ?? 0) + item.quantity
+  }
+  return Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, limit).map(([id]) => id)
 }
 
 export async function createProduct(input: CreateProductInput): Promise<Product> {
@@ -127,6 +147,7 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
       image_urls: images,
       active: input.active ?? true,
       volume_tiers: input.volume_tiers ?? [],
+      sale_ends_at: input.sale_ends_at ?? null,
     })
     .select()
     .single()

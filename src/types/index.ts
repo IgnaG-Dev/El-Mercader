@@ -28,6 +28,7 @@ export interface Product {
   reviews?: number
   active?: boolean
   volumeTiers?: VolumeTier[]
+  saleEndsAt?: string | null
 }
 
 export interface CartItem {
