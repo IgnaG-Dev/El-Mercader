@@ -362,7 +362,20 @@ export default function AdminOrders() {
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-on-surface text-base">{viewCustomerName}</div>
                 {viewCustomerEmail && <div className="text-sm text-on-surface-variant">{viewCustomerEmail}</div>}
-                {viewAddr?.phone && <div className="text-sm text-on-surface-variant">{viewAddr.phone}</div>}
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5">
+                  {(viewProfile?.phone ?? viewAddr?.phone) && (
+                    <span className="flex items-center gap-1 text-xs text-on-surface-variant">
+                      <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>phone</span>
+                      {viewProfile?.phone ?? viewAddr?.phone}
+                    </span>
+                  )}
+                  {viewProfile?.dni && (
+                    <span className="flex items-center gap-1 text-xs text-on-surface-variant">
+                      <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>badge</span>
+                      DNI {viewProfile.dni}
+                    </span>
+                  )}
+                </div>
               </div>
               <OrderStatusBadge status={viewOrder.status} />
             </section>

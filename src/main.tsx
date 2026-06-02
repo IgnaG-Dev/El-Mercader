@@ -22,7 +22,6 @@ async function syncUserFromSession(userId: string) {
       email: profile.email,
       role: profile.role as 'user' | 'admin',
       avatar: profile.avatar_url ?? undefined,
-      guild: profile.guild ?? undefined,
       phone: profile.phone ?? undefined,
       dni: profile.dni ?? undefined,
     })

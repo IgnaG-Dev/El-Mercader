@@ -2,18 +2,25 @@ import { useState } from 'react'
 import { useFinanceStore } from '../../store/financeStore'
 import Button from '../../components/ui/Button'
 
-const PAYMENT_LABELS: Record<string, { label: string; icon: string; feeLabel: string }> = {
-  mercadopago: { label: 'Mercado Pago', icon: 'account_balance_wallet', feeLabel: 'Comisión: 6%' },
-  transfer:    { label: 'Transferencia bancaria', icon: 'account_balance', feeLabel: 'Sin comisión extra' },
+const PAYMENT_LABELS: Record<string, { label: string; icon: string }> = {
+  mercadopago: { label: 'Mercado Pago', icon: 'account_balance_wallet' },
+  transfer:    { label: 'Transferencia bancaria', icon: 'account_balance' },
 }
 
 export default function AdminFinance() {
-  const { shippingCost, shippingDays, cpOrigen, paymentMethods, updateShipping, updateCpOrigen, togglePaymentMethod } = useFinanceStore()
+  const {
+    shippingCost, shippingDays, cpOrigen, paymentMethods, serviceFee,
+    updateShipping, updateCpOrigen, togglePaymentMethod, updatePaymentMethodFee, updateServiceFee,
+  } = useFinanceStore()
 
   const [cost, setCost] = useState(String(shippingCost))
   const [days, setDays] = useState(shippingDays)
   const [cp, setCp] = useState(cpOrigen)
   const [saved, setSaved] = useState(false)
+
+  const [mpFeeInput, setMpFeeInput] = useState(String(paymentMethods.mercadopago.fee))
+  const [serviceFeeInput, setServiceFeeInput] = useState(String(serviceFee))
+  const [feesSaved, setFeesSaved] = useState(false)
 
   function handleSave() {
     const parsed = Number(cost)
@@ -22,6 +29,17 @@ export default function AdminFinance() {
     if (cp.trim()) updateCpOrigen(cp.trim())
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  function handleSaveFees() {
+    const parsedMp = Number(mpFeeInput)
+    const parsedService = Number(serviceFeeInput)
+    if (isNaN(parsedMp) || parsedMp < 0 || parsedMp > 100) return
+    if (isNaN(parsedService) || parsedService < 0 || parsedService > 100) return
+    updatePaymentMethodFee('mercadopago', parsedMp)
+    updateServiceFee(parsedService)
+    setFeesSaved(true)
+    setTimeout(() => setFeesSaved(false), 2000)
   }
 
   return (
@@ -41,7 +59,9 @@ export default function AdminFinance() {
                     <span className="material-symbols-outlined text-primary" style={{ fontSize: '22px' }}>{meta.icon}</span>
                     <div>
                       <div className="font-bold text-sm text-on-surface">{meta.label}</div>
-                      <div className="text-xs text-on-surface-variant">{meta.feeLabel}</div>
+                      <div className="text-xs text-on-surface-variant">
+                        {cfg.fee > 0 ? `Comisión: ${cfg.fee}%` : 'Sin comisión extra'}
+                      </div>
                     </div>
                   </div>
                   <button
@@ -110,6 +130,51 @@ export default function AdminFinance() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Pricing discounts */}
+      <div className="mt-6 bg-surface-container rounded-xl border border-outline-variant/30 p-6">
+        <h2 className="font-headline text-headline-md text-on-surface mb-1">Descuentos en precio</h2>
+        <p className="text-sm text-on-surface-variant mb-5">
+          Estos porcentajes se muestran como descuento en la vista de cada producto. El cliente ve el precio "real" tachado y el precio con transferencia como precio final.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-on-surface-variant mb-1.5">Comisión Mercado Pago (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={mpFeeInput}
+              onChange={e => setMpFeeInput(e.target.value)}
+              className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary"
+            />
+            <p className="text-xs text-on-surface-variant mt-1">Porcentaje que cobra MP al vendedor por cada transacción.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-on-surface-variant mb-1.5">Comisión de servicio (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={serviceFeeInput}
+              onChange={e => setServiceFeeInput(e.target.value)}
+              className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary"
+            />
+            <p className="text-xs text-on-surface-variant mt-1">Costo operativo adicional que se descuenta al pagar por transferencia.</p>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <Button size="sm" onClick={handleSaveFees}>Guardar cambios</Button>
+          {feesSaved && (
+            <span className="text-sm text-secondary flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>check_circle</span>
+              Guardado
+            </span>
+          )}
         </div>
       </div>
 

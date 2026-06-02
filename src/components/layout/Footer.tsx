@@ -31,11 +31,15 @@ export default function Footer() {
           <div>
             <h5 className="text-label-bold font-bold text-primary mb-4 uppercase tracking-wider">Servicio al Cliente</h5>
             <ul className="space-y-2">
-              {['Reglas de Juego', 'Preguntas Frecuentes', 'Envíos y Devoluciones', 'Contacto'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-on-surface-variant hover:text-secondary transition-colors text-body-md">
-                    {item}
-                  </a>
+              {[
+                ['/reglas-de-juego', 'Reglas de Juego'],
+                ['/preguntas-frecuentes', 'Preguntas Frecuentes'],
+                ['/contacto', 'Contacto'],
+              ].map(([to, label]) => (
+                <li key={to}>
+                  <Link to={to} className="text-on-surface-variant hover:text-secondary transition-colors text-body-md">
+                    {label}
+                  </Link>
                 </li>
               ))}
             </ul>

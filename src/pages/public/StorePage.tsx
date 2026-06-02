@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ProductCard from '../../components/ui/ProductCard'
 import SEO from '../../components/ui/SEO'
 import { useProducts } from '../../hooks/useProducts'
 import { useCategories } from '../../hooks/useCategories'
+
+const PAGE_SIZE = 12
 
 const SORTS = [
   { value: 'default', label: 'Relevancia' },
@@ -35,6 +37,8 @@ export default function StorePage() {
   const [inStockOnly, setInStockOnly] = useState(false)
   const [groupByCategory, setGroupByCategory] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const { data: allProducts = [], isLoading } = useProducts()
   const { data: categories = [] } = useCategories()
@@ -84,6 +88,27 @@ export default function StorePage() {
       .map(c => ({ cat: c, products: filtered.filter(p => p.category === c.slug) }))
       .filter(g => g.products.length > 0)
   }, [filtered, groupByCategory, categories, activeCategory])
+
+  // Reset visible count whenever filters/sort produce a new list
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filtered])
+
+  // Load more when sentinel enters viewport
+  const loadMore = useCallback(() => {
+    setVisibleCount((n) => Math.min(n + PAGE_SIZE, filtered.length))
+  }, [filtered.length])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore() },
+      { rootMargin: '200px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadMore])
 
   const activeFiltersCount = [
     activeCategory !== 'all',
@@ -177,10 +202,13 @@ export default function StorePage() {
   )
 
   /* ── Product grid / grouped view ─────────────────────────────────── */
-  const productGrid = (products: typeof filtered) => (
-    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-gutter">
-      {products.map(p => <ProductCard key={p.id} product={p} />)}
-    </div>
+  const productGrid = (products: typeof filtered, withSentinel = false) => (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-gutter">
+        {products.map(p => <ProductCard key={p.id} product={p} />)}
+      </div>
+      {withSentinel && <div ref={sentinelRef} />}
+    </>
   )
 
   return (
@@ -370,7 +398,7 @@ export default function StorePage() {
             {/* Products output */}
             {isLoading ? (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-gutter">
-                {Array.from({ length: 8 }).map((_, i) => (
+                {Array.from({ length: PAGE_SIZE }).map((_, i) => (
                   <div key={i} className="bg-surface-container rounded-lg border border-outline-variant/30 h-52 md:h-72 animate-pulse" />
                 ))}
               </div>
@@ -399,9 +427,25 @@ export default function StorePage() {
                     {productGrid(products)}
                   </section>
                 ))}
+                <div ref={sentinelRef} />
               </div>
             ) : (
-              productGrid(filtered)
+              <>
+                {productGrid(filtered.slice(0, visibleCount), true)}
+                {/* Infinite scroll status */}
+                <div className="mt-8 flex justify-center">
+                  {visibleCount < filtered.length ? (
+                    <div className="flex items-center gap-2 text-sm text-on-surface-variant">
+                      <span className="material-symbols-outlined animate-spin text-primary" style={{ fontSize: '18px' }}>progress_activity</span>
+                      Cargando más productos...
+                    </div>
+                  ) : filtered.length > PAGE_SIZE ? (
+                    <p className="text-xs text-on-surface-variant/60">
+                      — {filtered.length} productos en total —
+                    </p>
+                  ) : null}
+                </div>
+              </>
             )}
           </div>
         </div>

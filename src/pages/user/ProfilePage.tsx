@@ -59,13 +59,6 @@ export default function ProfilePage() {
               <>
                 <h2 className="font-headline text-headline-md text-on-surface">{user?.name}</h2>
                 <p className="text-body-md text-on-surface-variant mt-1">{user?.email}</p>
-                {user?.guild && (
-                  <p className="text-label-sm text-on-surface-variant mt-1">{user.guild}</p>
-                )}
-                <div className="mt-2 inline-flex items-center gap-1 bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-label-sm font-bold">
-                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>verified</span>
-                  Gremio activo
-                </div>
                 <button onClick={() => setEditing(true)} className="mt-4 text-label-sm text-secondary hover:underline block mx-auto">
                   Editar nombre
                 </button>

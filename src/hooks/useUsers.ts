@@ -17,7 +17,7 @@ export function useUsers() {
 export function useUpdateUser() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: { name?: string; guild?: string } }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: { name?: string; phone?: string; dni?: string } }) =>
       updateProfile(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -50,9 +50,9 @@ export function useCreateUser() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({
-      email, password, name, guild, role,
-    }: { email: string; password: string; name: string; guild?: string; role?: 'user' | 'admin' }) =>
-      createUserViaSignup(email, password, name, guild, role),
+      email, password, name, role,
+    }: { email: string; password: string; name: string; role?: 'user' | 'admin' }) =>
+      createUserViaSignup(email, password, name, undefined, role),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
     },

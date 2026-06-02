@@ -1,9 +1,14 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useCartStore } from '../../store/cartStore'
+import { useFinanceStore } from '../../store/financeStore'
 
 export default function CartPage() {
   const { items, total, updateQuantity, removeItem } = useCartStore()
   const navigate = useNavigate()
+  const { paymentMethods, serviceFee } = useFinanceStore()
+  const totalDiscount = paymentMethods.mercadopago.fee + serviceFee
+  const hasDiscount = totalDiscount > 0 && paymentMethods.transfer.enabled
+  const totalSavings = hasDiscount ? Math.round(total * totalDiscount / 100) : 0
 
   if (items.length === 0) {
     return (
@@ -25,21 +30,39 @@ export default function CartPage() {
         {/* Items */}
         <div className="lg:col-span-2 space-y-4">
           {items.map(({ product, quantity }) => (
-            <div key={product.id} className="bg-surface-container rounded-xl border border-outline-variant/30 p-4 flex gap-4">
+            <div key={product.id} className="bg-surface-container rounded-xl border border-outline-variant/30 p-4 flex gap-3">
               <Link to={`/producto/${product.id}`} className="flex-shrink-0">
-                <img src={product.image} alt={product.name} className="w-24 h-24 object-cover rounded-lg" />
+                <img src={product.image} alt={product.name} className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-lg" />
               </Link>
               <div className="flex-1 min-w-0">
-                <Link to={`/producto/${product.id}`}>
-                  <h3 className="font-bold text-label-bold text-on-surface hover:text-primary line-clamp-2">{product.name}</h3>
-                </Link>
-                <p className="text-body-md text-secondary font-bold mt-1">${product.price.toFixed(2)}</p>
-                <div className="flex items-center gap-3 mt-3">
+                <div className="flex items-start justify-between gap-2">
+                  <Link to={`/producto/${product.id}`} className="flex-1 min-w-0">
+                    <h3 className="font-bold text-label-bold text-on-surface hover:text-primary line-clamp-2 text-sm sm:text-base">{product.name}</h3>
+                  </Link>
+                  {/* Price total — top right */}
+                  <div className="text-right flex-shrink-0">
+                    {hasDiscount && (
+                      <p className="text-xs line-through text-on-surface-variant/50">
+                        ${(Math.round(product.price * (1 + totalDiscount / 100)) * quantity).toLocaleString('es-AR')}
+                      </p>
+                    )}
+                    <p className="font-bold text-base sm:text-lg text-on-surface whitespace-nowrap">
+                      ${(product.price * quantity).toLocaleString('es-AR')}
+                    </p>
+                  </div>
+                </div>
+                {hasDiscount && (
+                  <p className="text-xs line-through text-on-surface-variant/50 mt-0.5">
+                    ${Math.round(product.price * (1 + totalDiscount / 100)).toLocaleString('es-AR')}
+                  </p>
+                )}
+                <p className="text-sm text-secondary font-bold">${product.price.toLocaleString('es-AR')}</p>
+                <div className="flex items-center gap-2 mt-2">
                   <div className="flex items-center border border-outline-variant rounded overflow-hidden">
                     <button onClick={() => updateQuantity(product.id, quantity - 1)} className="px-2 py-1 bg-surface-container hover:bg-surface-container-high transition-colors">
                       <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>remove</span>
                     </button>
-                    <span className="px-3 py-1 text-body-md font-bold min-w-[2.5rem] text-center">{quantity}</span>
+                    <span className="px-3 py-1 text-body-md font-bold min-w-[2rem] text-center">{quantity}</span>
                     <button onClick={() => updateQuantity(product.id, quantity + 1)} className="px-2 py-1 bg-surface-container hover:bg-surface-container-high transition-colors">
                       <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
                     </button>
@@ -49,9 +72,6 @@ export default function CartPage() {
                     <span className="text-label-sm">Eliminar</span>
                   </button>
                 </div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="font-bold text-headline-md text-on-surface">${(product.price * quantity).toFixed(2)}</p>
               </div>
             </div>
           ))}
@@ -64,7 +84,7 @@ export default function CartPage() {
             <div className="space-y-3 mb-6">
               <div className="flex justify-between text-body-md text-on-surface-variant">
                 <span>Subtotal ({items.reduce((s, i) => s + i.quantity, 0)} artículos)</span>
-                <span>${total.toFixed(2)}</span>
+                <span>${total.toLocaleString('es-AR')}</span>
               </div>
               <div className="flex justify-between text-body-md text-on-surface-variant">
                 <span>Envío</span>
@@ -72,8 +92,14 @@ export default function CartPage() {
               </div>
               <div className="border-t border-outline-variant pt-3 flex justify-between font-bold text-headline-md text-on-surface">
                 <span>Total</span>
-                <span>${total.toFixed(2)}</span>
+                <span>${total.toLocaleString('es-AR')}</span>
               </div>
+              {hasDiscount && totalSavings > 0 && (
+                <div className="text-xs text-secondary bg-secondary/10 rounded-lg p-2.5 flex items-start gap-1.5">
+                  <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>local_offer</span>
+                  <span>Ahorrás <strong>${totalSavings.toLocaleString('es-AR')}</strong> pagando con transferencia bancaria</span>
+                </div>
+              )}
             </div>
             <button
               onClick={() => navigate('/finalizar-compra')}

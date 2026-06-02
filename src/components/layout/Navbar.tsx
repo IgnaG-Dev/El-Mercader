@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
+import { useLocationStore } from '../../store/locationStore'
+import { useAddresses } from '../../hooks/useAddresses'
+import { PROVINCES } from '../../constants/provinces'
+import { reverseGeocode } from '../../lib/geo'
 
 const desktopLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive
@@ -18,10 +22,60 @@ const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [cartBump, setCartBump] = useState(false)
+  const [locationOpen, setLocationOpen] = useState(false)
+  const [pendingProvince, setPendingProvince] = useState('')
+  const [pendingCity, setPendingCity] = useState('')
+  const [pendingStreet, setPendingStreet] = useState('')
+  const [pendingPostalCode, setPendingPostalCode] = useState('')
+  const [geoLoading, setGeoLoading] = useState(false)
+  const [geoError, setGeoError] = useState<string | null>(null)
+
   const itemCount = useCartStore((s) => s.itemCount)
   const prevCount = useRef(itemCount)
   const { isAuthenticated, user, logout } = useAuthStore()
   const navigate = useNavigate()
+
+  const { city, province, street, postalCode, setLocation, clearLocation } = useLocationStore()
+  const { data: addresses } = useAddresses({ enabled: isAuthenticated })
+
+  const locationDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Sync default address → locationStore when user logs in and has no location set
+  useEffect(() => {
+    if (!isAuthenticated || city) return
+    const defaultAddr = addresses?.find((a) => a.isDefault) ?? addresses?.[0]
+    if (defaultAddr) {
+      setLocation({
+        city: defaultAddr.city,
+        province: defaultAddr.province,
+        street: defaultAddr.street,
+        postalCode: defaultAddr.postalCode,
+      })
+    }
+  }, [addresses, isAuthenticated, city, setLocation])
+
+  // Initialise pending values when dropdown opens
+  useEffect(() => {
+    if (locationOpen) {
+      setPendingProvince(province)
+      setPendingCity(city)
+      setPendingStreet(street)
+      setPendingPostalCode(postalCode)
+      setGeoError(null)
+    }
+  }, [locationOpen, province, city, street, postalCode])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!locationOpen) return
+    const handler = (e: MouseEvent) => {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
+        setLocationOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [locationOpen])
 
   useEffect(() => {
     if (itemCount > prevCount.current) {
@@ -36,9 +90,52 @@ export default function Navbar() {
 
   const handleLogout = () => {
     logout()
+    clearLocation()
     navigate('/')
     close()
   }
+
+  const handleSaveLocation = () => {
+    if (!pendingProvince) return
+    setLocation({ province: pendingProvince, city: pendingCity, street: pendingStreet, postalCode: pendingPostalCode })
+    setLocationOpen(false)
+  }
+
+  const handleGeolocate = async () => {
+    if (!navigator.geolocation) {
+      setGeoError('Tu navegador no soporta geolocalización.')
+      return
+    }
+    setGeoLoading(true)
+    setGeoError(null)
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+      )
+      const { latitude, longitude } = position.coords
+      const result = await reverseGeocode(latitude, longitude)
+      setPendingProvince(result.province)
+      setPendingCity(result.city)
+      if (result.street) setPendingStreet(result.street)
+      if (result.postalCode) setPendingPostalCode(result.postalCode)
+      if (result.provinceWarning) {
+        setGeoError('Provincia no reconocida. Seleccionála manualmente.')
+      }
+    } catch (err) {
+      const isGeoErr = err && typeof err === 'object' && 'code' in err
+      if (isGeoErr && (err as GeolocationPositionError).code === 1) {
+        setGeoError('Permiso denegado. Habilitá la ubicación en tu navegador.')
+      } else {
+        setGeoError('No se pudo obtener la ubicación.')
+      }
+    } finally {
+      setGeoLoading(false)
+    }
+  }
+
+  const locationLabel = city && province
+    ? `${city}, ${province}`
+    : province || null
 
   return (
     <nav className="bg-inverse-surface text-tertiary-fixed sticky top-0 z-50 shadow-md">
@@ -118,10 +215,145 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* ── Location bar ── */}
+      <div className="border-t border-white/5">
+        <div className="relative max-w-container-max mx-auto px-4 md:px-margin-desktop py-1.5">
+          {/* Trigger */}
+          <button
+            onClick={() => setLocationOpen((v) => !v)}
+            className="flex items-center gap-1 text-xs text-tertiary-fixed/70 hover:text-tertiary-fixed transition-colors max-w-full"
+          >
+            <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>location_on</span>
+            <span className="truncate">
+              Enviar a:{' '}
+              <strong className="text-tertiary-fixed">
+                {locationLabel ?? 'Configurar ubicación'}
+              </strong>
+            </span>
+            <span
+              className={`material-symbols-outlined flex-shrink-0 transition-transform duration-200 ${locationOpen ? 'rotate-180' : ''}`}
+              style={{ fontSize: '14px' }}
+            >
+              expand_more
+            </span>
+          </button>
+
+          {/* Dropdown panel — full width on mobile, fixed 300px on md+ */}
+          {locationOpen && (
+            <div
+              ref={locationDropdownRef}
+              className="absolute left-0 right-0 md:right-auto md:w-[300px] top-full mt-1 z-50 bg-surface-container-high rounded-xl shadow-2xl border border-outline-variant p-4 mx-0"
+            >
+              <p className="font-bold text-sm text-on-surface mb-3 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>local_shipping</span>
+                ¿A dónde enviamos?
+              </p>
+
+              <div className="space-y-3">
+                {/* Geolocation button */}
+                <button
+                  type="button"
+                  onClick={handleGeolocate}
+                  disabled={geoLoading}
+                  className="flex items-center justify-center gap-2 w-full text-sm font-bold text-primary border border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 active:bg-primary/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span
+                    className={`material-symbols-outlined ${geoLoading ? 'animate-spin' : ''}`}
+                    style={{ fontSize: '18px' }}
+                  >
+                    {geoLoading ? 'progress_activity' : 'my_location'}
+                  </span>
+                  {geoLoading ? 'Detectando...' : 'Usar mi ubicación actual'}
+                </button>
+
+                {geoError && (
+                  <p className="text-xs text-error flex items-start gap-1">
+                    <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>error</span>
+                    {geoError}
+                  </p>
+                )}
+
+                {/* Divider */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-outline-variant" />
+                  <span className="text-xs text-on-surface-variant whitespace-nowrap">o ingresá manualmente</span>
+                  <div className="flex-1 h-px bg-outline-variant" />
+                </div>
+
+                {/* Province */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-on-surface">Provincia *</label>
+                  <select
+                    value={pendingProvince}
+                    onChange={(e) => setPendingProvince(e.target.value)}
+                    className="w-full border border-outline-variant rounded-lg px-3 py-2.5 text-sm bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  >
+                    <option value="">Seleccioná una provincia</option>
+                    {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+
+                {/* City */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-on-surface">Ciudad</label>
+                  <input
+                    value={pendingCity}
+                    onChange={(e) => setPendingCity(e.target.value)}
+                    placeholder="Ej: Corrientes"
+                    className="w-full border border-outline-variant rounded-lg px-3 py-2.5 text-sm bg-surface text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  />
+                </div>
+
+                {/* Street */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-on-surface">Calle y número</label>
+                  <input
+                    value={pendingStreet}
+                    onChange={(e) => setPendingStreet(e.target.value)}
+                    placeholder="Ej: Av. San Martín 1234"
+                    className="w-full border border-outline-variant rounded-lg px-3 py-2.5 text-sm bg-surface text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  />
+                </div>
+
+                {/* Postal Code */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-on-surface">Código postal</label>
+                  <input
+                    value={pendingPostalCode}
+                    onChange={(e) => setPendingPostalCode(e.target.value)}
+                    placeholder="Ej: 3400"
+                    inputMode="numeric"
+                    className="w-full border border-outline-variant rounded-lg px-3 py-2.5 text-sm bg-surface text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
+                  />
+                </div>
+
+                {/* Save */}
+                <button
+                  onClick={handleSaveLocation}
+                  disabled={!pendingProvince}
+                  className="w-full bg-primary text-on-primary rounded-lg py-2.5 text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Guardar ubicación
+                </button>
+
+                {isAuthenticated && (
+                  <Link
+                    to="/direcciones"
+                    onClick={() => setLocationOpen(false)}
+                    className="block text-center text-xs text-primary hover:underline py-0.5"
+                  >
+                    Administrar mis direcciones
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Mobile menu ── */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/10">
-          {/* Nav links */}
           <div className="px-3 pt-3 pb-2 space-y-1">
             <NavLink to="/" end className={mobileLinkClass} onClick={close}>
               <span className="material-symbols-outlined text-xl">home</span>
@@ -137,7 +369,6 @@ export default function Navbar() {
             </NavLink>
           </div>
 
-          {/* Account section */}
           <div className="border-t border-white/10 px-3 pt-2 pb-4 space-y-1">
             {isAuthenticated ? (
               <>

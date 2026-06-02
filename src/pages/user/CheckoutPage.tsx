@@ -4,9 +4,14 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
 import { useFinanceStore } from '../../store/financeStore'
+import { useLocationStore } from '../../store/locationStore'
 import { useCreateOrder } from '../../hooks/useOrders'
+import { useAddresses, useCreateAddress } from '../../hooks/useAddresses'
 import { cotizarAndreani } from '../../services/andreani'
 import Button from '../../components/ui/Button'
+import { PROVINCES } from '../../constants/provinces'
+import { SHIPPING_ZONES } from '../../constants/shippingZones'
+import { reverseGeocode } from '../../lib/geo'
 
 function SectionCard({ children }: { children: ReactNode }) {
   return (
@@ -46,68 +51,15 @@ interface ShippingQuote {
   source: 'andreani' | 'zone'
 }
 
-const PROVINCES = [
-  'Buenos Aires', 'CABA', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba',
-  'Corrientes', 'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja',
-  'Mendoza', 'Misiones', 'Neuquén', 'Río Negro', 'Salta', 'San Juan',
-  'San Luis', 'Santa Cruz', 'Santa Fe', 'Santiago del Estero',
-  'Tierra del Fuego', 'Tucumán',
-]
-
-const SHIPPING_ZONES: Record<string, { cost: number; days: string }> = {
-  'CABA':                 { cost: 8000,  days: '2-3 días hábiles' },
-  'Buenos Aires':         { cost: 12000, days: '4-6 días hábiles' },
-  'Córdoba':              { cost: 15000, days: '5-7 días hábiles' },
-  'Santa Fe':             { cost: 15000, days: '5-7 días hábiles' },
-  'Entre Ríos':           { cost: 16000, days: '6-8 días hábiles' },
-  'Mendoza':              { cost: 17000, days: '6-8 días hábiles' },
-  'San Luis':             { cost: 17000, days: '6-8 días hábiles' },
-  'La Pampa':             { cost: 17000, days: '6-8 días hábiles' },
-  'Tucumán':              { cost: 17000, days: '7-9 días hábiles' },
-  'Santiago del Estero':  { cost: 17000, days: '7-9 días hábiles' },
-  'Salta':                { cost: 18000, days: '7-9 días hábiles' },
-  'Jujuy':                { cost: 18000, days: '7-9 días hábiles' },
-  'Misiones':             { cost: 18000, days: '7-9 días hábiles' },
-  'Corrientes':           { cost: 18000, days: '7-9 días hábiles' },
-  'Chaco':                { cost: 18000, days: '7-9 días hábiles' },
-  'Catamarca':            { cost: 18000, days: '7-9 días hábiles' },
-  'La Rioja':             { cost: 18000, days: '7-9 días hábiles' },
-  'San Juan':             { cost: 18000, days: '7-9 días hábiles' },
-  'Formosa':              { cost: 19000, days: '8-10 días hábiles' },
-  'Neuquén':              { cost: 20000, days: '8-10 días hábiles' },
-  'Río Negro':            { cost: 21000, days: '9-11 días hábiles' },
-  'Chubut':               { cost: 22000, days: '10-12 días hábiles' },
-  'Santa Cruz':           { cost: 24000, days: '11-13 días hábiles' },
-  'Tierra del Fuego':     { cost: 27000, days: '12-15 días hábiles' },
-}
-
-function mapNominatimState(state: string): string {
-  const explicit: Record<string, string> = {
-    'Ciudad Autónoma de Buenos Aires': 'CABA',
-    'Ciudad de Buenos Aires':          'CABA',
-    'Autonomous City of Buenos Aires': 'CABA',
-    'Province of Buenos Aires':        'Buenos Aires',
-    'Provincia de Buenos Aires':       'Buenos Aires',
-  }
-  if (explicit[state]) return explicit[state]
-  if (PROVINCES.includes(state)) return state
-  const lower = state.toLowerCase()
-  return PROVINCES.find(p => p.toLowerCase() === lower) ?? ''
-}
-
-function extractStreet(addr: Record<string, string>): string {
-  // Try different road-type keys Nominatim uses for Argentine addresses
-  const roadName = addr.road ?? addr.pedestrian ?? addr.footway
-    ?? addr.cycleway ?? addr.path ?? addr.residential ?? ''
-  return [roadName, addr.house_number].filter(Boolean).join(' ')
-}
-
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCartStore()
   const { user, isAuthenticated, register } = useAuthStore()
-  const { shippingCost: baseShippingCost, shippingDays: baseShippingDays, paymentMethods } = useFinanceStore()
+  const { shippingCost: baseShippingCost, shippingDays: baseShippingDays, paymentMethods, serviceFee } = useFinanceStore()
+  const { city: savedCity, province: savedProvince, street: savedStreet, postalCode: savedPostalCode, setLocation } = useLocationStore()
   const navigate = useNavigate()
   const createOrder = useCreateOrder()
+  const createAddress = useCreateAddress()
+  const { data: addresses } = useAddresses({ enabled: isAuthenticated })
 
   const enabledMethods = Object.entries(paymentMethods).filter(([, cfg]) => cfg.enabled)
 
@@ -126,6 +78,7 @@ export default function CheckoutPage() {
     province: '',
     postalCode: '',
   })
+  const [formInitialised, setFormInitialised] = useState(false)
   const defaultMethod = enabledMethods[0]?.[0] ?? 'transfer'
   const [paymentMethod, setPaymentMethod] = useState(defaultMethod)
   const [errors, setErrors] = useState<Partial<ShippingForm & PersonalForm>>({})
@@ -135,6 +88,36 @@ export default function CheckoutPage() {
   const [shippingQuote, setShippingQuote] = useState<ShippingQuote | null>(null)
   const [shippingLoading, setShippingLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Pre-fill shipping form from saved default address (auth) or locationStore (guest)
+  useEffect(() => {
+    if (formInitialised) return
+    const defaultAddr = addresses?.find((a) => a.isDefault) ?? addresses?.[0]
+    if (isAuthenticated && defaultAddr) {
+      setForm({
+        street: defaultAddr.street,
+        city: defaultAddr.city,
+        province: defaultAddr.province,
+        postalCode: defaultAddr.postalCode,
+      })
+      setLocation({
+        city: defaultAddr.city,
+        province: defaultAddr.province,
+        street: defaultAddr.street,
+        postalCode: defaultAddr.postalCode,
+      })
+      setFormInitialised(true)
+    } else if (!isAuthenticated && (savedCity || savedProvince)) {
+      setForm((prev) => ({
+        ...prev,
+        city: savedCity || prev.city,
+        province: savedProvince || prev.province,
+        street: savedStreet || prev.street,
+        postalCode: savedPostalCode || prev.postalCode,
+      }))
+      setFormInitialised(true)
+    }
+  }, [addresses, isAuthenticated, formInitialised, savedCity, savedProvince, savedStreet, savedPostalCode, setLocation])
 
   // When province changes recalculate immediately via zone table (instant feedback),
   // then try Andreani once we also have a valid postal code
@@ -184,20 +167,15 @@ export default function CheckoutPage() {
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
       )
       const { latitude, longitude } = position.coords
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${latitude}&lon=${longitude}&accept-language=es`,
-      )
-      if (!res.ok) throw new Error('geocoding_failed')
-      const data = await res.json()
-      const addr: Record<string, string> = data.address ?? {}
-
-      const street     = extractStreet(addr)
-      const city       = addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.suburb ?? addr.quarter ?? ''
-      const postalCode = (addr.postcode ?? '').replace(/\s/g, '')
-      const province   = mapNominatimState(addr.state ?? '')
-
-      setForm(prev => ({ ...prev, street, city, postalCode, province }))
-      if (!province) setGeoError('Provincia no reconocida. Verificá o seleccionála manualmente.')
+      const result = await reverseGeocode(latitude, longitude)
+      setForm((prev) => ({
+        ...prev,
+        street: result.street,
+        city: result.city,
+        postalCode: result.postalCode,
+        province: result.province,
+      }))
+      if (result.provinceWarning) setGeoError('Provincia no reconocida. Verificá o seleccionála manualmente.')
     } catch (err) {
       const isGeoError = err && typeof err === 'object' && 'code' in err
       if (isGeoError && (err as GeolocationPositionError).code === 1) {
@@ -266,6 +244,35 @@ export default function CheckoutPage() {
           postalCode: form.postalCode,
         },
       })
+
+      // Persist location for future visits
+      setLocation({
+        city: form.city,
+        province: form.province,
+        street: form.street,
+        postalCode: form.postalCode,
+      })
+
+      // Save address to DB if authenticated and it doesn't already exist
+      if (isAuthenticated) {
+        const alreadySaved = addresses?.some(
+          (a) =>
+            a.street.toLowerCase() === form.street.toLowerCase() &&
+            a.city.toLowerCase() === form.city.toLowerCase() &&
+            a.postalCode === form.postalCode,
+        )
+        if (!alreadySaved) {
+          createAddress.mutate({
+            label: form.city,
+            street: form.street,
+            city: form.city,
+            province: form.province,
+            postalCode: form.postalCode,
+            isDefault: !addresses?.length,
+          })
+        }
+      }
+
       clearCart()
       if (paymentMethod === 'transfer') {
         navigate('/instrucciones-pago', { state: { orderId, total: orderTotal } })
@@ -278,6 +285,7 @@ export default function CheckoutPage() {
   }
 
   const mpFee = paymentMethod === 'mercadopago' ? Math.round(total * paymentMethods.mercadopago.fee / 100) : 0
+  const serviceFeeSaving = serviceFee > 0 ? Math.round(total * serviceFee / 100) : 0
   const activeShippingCost = shippingQuote?.cost ?? 0
   const orderTotal = total + activeShippingCost + mpFee
 
@@ -553,6 +561,16 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-sm text-on-surface-variant">
                   <span>Comisión MP ({paymentMethods.mercadopago.fee}%)</span>
                   <span>${mpFee.toLocaleString('es-AR')}</span>
+                </div>
+              )}
+
+              {serviceFeeSaving > 0 && (
+                <div className="flex justify-between text-sm text-secondary">
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>local_offer</span>
+                    Descuento comisión servicio ({serviceFee}%)
+                  </span>
+                  <span>-${serviceFeeSaving.toLocaleString('es-AR')}</span>
                 </div>
               )}
 

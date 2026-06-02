@@ -1,52 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
 import SEO from '../../components/ui/SEO'
-
-interface RssItem {
-  title: string
-  pubDate: string
-  link: string
-  guid: string
-  author: string
-  thumbnail: string
-  description: string
-}
-
-interface RssFeed {
-  title: string
-  description: string
-  link: string
-  image: string
-}
-
-interface Rss2JsonResponse {
-  status: string
-  feed: RssFeed
-  items: RssItem[]
-}
 
 const SUBREDDIT = 'CatanARG'
 const REDDIT_URL = `https://www.reddit.com/r/${SUBREDDIT}`
-const RSS_API = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(`${REDDIT_URL}/.rss`)}&count=15`
-
-async function fetchRedditRss(): Promise<Rss2JsonResponse> {
-  const res = await fetch(RSS_API)
-  if (!res.ok) throw new Error('fetch failed')
-  const data: Rss2JsonResponse = await res.json()
-  if (data.status !== 'ok') throw new Error('rss2json error')
-  return data
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function timeAgo(dateStr: string): string {
-  const ms = Date.now() - new Date(dateStr).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 3600) return `hace ${Math.floor(s / 60)}m`
-  if (s < 86400) return `hace ${Math.floor(s / 3600)}h`
-  return `hace ${Math.floor(s / 86400)}d`
-}
 
 const RedditIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 20 20" className={className} aria-hidden="true">
@@ -55,16 +10,6 @@ const RedditIcon = ({ className }: { className?: string }) => (
 )
 
 export default function CommunityPage() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['reddit-rss', SUBREDDIT],
-    queryFn: fetchRedditRss,
-    staleTime: 5 * 60 * 1000,
-    retry: 1,
-  })
-
-  const posts = data?.items ?? []
-  const feed = data?.feed
-
   return (
     <>
     <SEO
@@ -85,7 +30,7 @@ export default function CommunityPage() {
       <div className="text-center mb-12">
         <h1 className="font-headline text-headline-lg text-primary mb-4">La Comunidad del Gremio</h1>
         <p className="text-body-lg text-on-surface-variant max-w-2xl mx-auto mb-3">
-          {feed?.description || 'Sumate a la comunidad de jugadores de Catan en Argentina. Publicaciones del subreddit r/CatanARG con las últimas noticias, estrategias y torneos.'}
+          Sumate a la comunidad de jugadores de Catan en Argentina. Visitá r/CatanARG para las últimas noticias, estrategias y torneos.
         </p>
         <p className="text-sm text-on-surface-variant max-w-xl mx-auto">
           Encontrá reseñas de expansiones, consejos para principiantes, partidas online y presenciales en Buenos Aires, Córdoba, Rosario y todo el país.
@@ -108,118 +53,28 @@ export default function CommunityPage() {
       </a>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Posts feed */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-headline text-headline-md text-on-surface">Posts de r/CatanARG</h2>
+        {/* Posts redirect */}
+        <div className="lg:col-span-2">
+          <h2 className="font-headline text-headline-md text-on-surface mb-4">Posts de r/CatanARG</h2>
+          <div className="bg-surface-container rounded-xl p-8 border border-outline-variant/30 text-center">
+            <RedditIcon className="w-14 h-14 mx-auto mb-4 fill-[#FF4500]" />
+            <p className="text-body-lg text-on-surface font-bold mb-2">
+              Los posts están en Reddit
+            </p>
+            <p className="text-body-md text-on-surface-variant mb-6 max-w-md mx-auto">
+              Para ver las publicaciones, estrategias, partidas y toda la actividad de la comunidad, visitá el subreddit r/CatanARG directamente en Reddit.
+            </p>
             <a
               href={REDDIT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-label-sm text-primary hover:underline"
+              className="inline-flex items-center gap-2 bg-[#FF4500] text-white px-6 py-3 rounded-lg font-bold hover:bg-[#e03d00] transition-colors text-body-md"
             >
-              Ver todos
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>open_in_new</span>
+              <RedditIcon className="w-5 h-5 fill-white" />
+              Ver posts en r/CatanARG
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>open_in_new</span>
             </a>
           </div>
-
-          {isLoading && (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-surface-container rounded-xl p-6 border border-outline-variant/30 animate-pulse">
-                  <div className="h-4 bg-outline-variant/40 rounded w-3/4 mb-3" />
-                  <div className="h-3 bg-outline-variant/30 rounded w-1/2 mb-4" />
-                  <div className="h-3 bg-outline-variant/20 rounded w-1/4" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {isError && (
-            <div className="bg-surface-container rounded-xl p-8 border border-outline-variant/30 text-center">
-              <RedditIcon className="w-12 h-12 mx-auto mb-3 fill-[#FF4500] opacity-40" />
-              <p className="text-body-md text-on-surface-variant mb-4">
-                No se pudieron cargar los posts. Visitá el subreddit directamente.
-              </p>
-              <a
-                href={REDDIT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-[#FF4500] text-white px-5 py-2.5 rounded-lg font-bold hover:bg-[#e03d00] transition-colors"
-              >
-                <RedditIcon className="w-5 h-5 fill-white" />
-                Abrir r/CatanARG
-              </a>
-            </div>
-          )}
-
-          {!isLoading && !isError && posts.length === 0 && (
-            <div className="bg-surface-container rounded-xl p-8 border border-outline-variant/30 text-center">
-              <p className="text-body-md text-on-surface-variant mb-3">
-                Todavía no hay posts en el subreddit. ¡Sé el primero en publicar!
-              </p>
-              <a
-                href={REDDIT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-[#FF4500] text-white px-5 py-2.5 rounded-lg font-bold hover:bg-[#e03d00] transition-colors"
-              >
-                <RedditIcon className="w-5 h-5 fill-white" />
-                Ir a r/CatanARG
-              </a>
-            </div>
-          )}
-
-          {posts.map((post) => {
-            const preview = stripHtml(post.description).replace(/submitted by.*$/, '').trim()
-            const author = post.author.replace('/u/', '')
-            return (
-              <a
-                key={post.guid}
-                href={post.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex gap-4 bg-surface-container rounded-xl p-5 border border-outline-variant/30 soft-lift hover:border-primary/40 transition-colors"
-              >
-                {/* Reddit avatar */}
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-[#FF4500] flex items-center justify-center text-white font-bold text-sm">
-                    {author[0]?.toUpperCase()}
-                  </div>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <span className="font-bold text-label-bold text-on-surface">u/{author}</span>
-                    <span className="text-label-sm text-on-surface-variant">· {timeAgo(post.pubDate)}</span>
-                  </div>
-
-                  <h3 className="font-bold text-body-lg text-on-surface mb-2 leading-snug">
-                    {post.title}
-                  </h3>
-
-                  {preview && (
-                    <p className="text-body-md text-on-surface-variant mb-3 line-clamp-2 text-sm">
-                      {preview}
-                    </p>
-                  )}
-
-                  {post.thumbnail && post.thumbnail.startsWith('http') && (
-                    <img
-                      src={post.thumbnail}
-                      alt=""
-                      className="rounded-lg mb-3 max-h-28 object-cover"
-                    />
-                  )}
-
-                  <div className="flex items-center gap-1 text-primary text-label-sm">
-                    <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>open_in_new</span>
-                    Ver en Reddit
-                  </div>
-                </div>
-              </a>
-            )
-          })}
         </div>
 
         {/* Sidebar */}
@@ -229,7 +84,7 @@ export default function CommunityPage() {
             <RedditIcon className="w-14 h-14 mx-auto mb-3 fill-[#FF4500]" />
             <h3 className="font-headline text-headline-sm text-on-surface mb-1">r/CatanARG</h3>
             <p className="text-label-sm text-on-surface-variant mb-5 leading-snug">
-              {feed?.description || 'La comunidad argentina de Catan en Reddit'}
+              La comunidad argentina de Catan en Reddit
             </p>
             <a
               href={REDDIT_URL}

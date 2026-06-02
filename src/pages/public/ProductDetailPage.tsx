@@ -3,6 +3,10 @@ import React, { useState, useRef } from 'react'
 import { useProductBySlug, useProducts } from '../../hooks/useProducts'
 import { useCartStore } from '../../store/cartStore'
 import { useFinanceStore } from '../../store/financeStore'
+import { useLocationStore } from '../../store/locationStore'
+import { SHIPPING_ZONES } from '../../constants/shippingZones'
+import { PROVINCES } from '../../constants/provinces'
+import { getEffectivePrice } from '../../lib/pricing'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import SEO from '../../components/ui/SEO'
@@ -18,6 +22,9 @@ export default function ProductDetailPage() {
   const addTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const addItem = useCartStore((s) => s.addItem)
   const navigate = useNavigate()
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
+  const [pickerProvince, setPickerProvince] = useState('')
+  const { city, province, setLocation } = useLocationStore()
 
   const handleAddToCart = () => {
     addItem(product!, qty)
@@ -40,7 +47,17 @@ export default function ProductDetailPage() {
 
   const { data: product, isLoading } = useProductBySlug(slug)
   const { data: allProducts = [] } = useProducts()
-  const { paymentMethods, shippingCost, shippingDays } = useFinanceStore()
+  const { paymentMethods, shippingCost, shippingDays, serviceFee } = useFinanceStore()
+
+  const shippingZone = province
+    ? (SHIPPING_ZONES[province] ?? { cost: shippingCost, days: shippingDays })
+    : null
+
+  const handleApplyProvince = () => {
+    if (!pickerProvince) return
+    setLocation({ province: pickerProvince })
+    setShowLocationPicker(false)
+  }
 
   if (isLoading) {
     return (
@@ -71,6 +88,12 @@ export default function ProductDetailPage() {
   }
 
   const related = allProducts.filter((p) => p.id !== product.id && p.category === product.category).slice(0, 4)
+
+  const mpFee = paymentMethods.mercadopago.fee
+  const totalDiscount = mpFee + serviceFee
+  const hasDiscount = totalDiscount > 0 && paymentMethods.transfer.enabled
+  const inflatedPrice = hasDiscount ? Math.round(product.price * (1 + totalDiscount / 100)) : product.price
+  const savings = inflatedPrice - product.price
 
   const seoDescription = product.description
     ? product.description.slice(0, 155) + (product.description.length > 155 ? '…' : '')
@@ -205,19 +228,134 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            <p className="text-2xl md:text-headline-md font-bold text-secondary mb-5">
-              ${product.price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-            </p>
+            <div className="mb-5">
+              {(() => {
+                const effectiveUnit = getEffectivePrice(product, qty)
+                const activeTier = product.volumeTiers?.find(t => t.price === effectiveUnit && effectiveUnit !== product.price)
+                const effectiveInflated = hasDiscount ? Math.round(effectiveUnit * (1 + totalDiscount / 100)) : effectiveUnit
+                const effectiveSavings = effectiveInflated - effectiveUnit
+                return (
+                  <>
+                    {hasDiscount && (
+                      <p className="text-sm line-through text-on-surface-variant/60 mb-0.5">
+                        ${effectiveInflated.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </p>
+                    )}
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <p className="text-2xl md:text-headline-md font-bold text-secondary">
+                        ${effectiveUnit.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        <span className="text-sm font-normal text-on-surface-variant ml-1">c/u</span>
+                      </p>
+                      {activeTier && (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full border border-tertiary/20">
+                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>sell</span>
+                          Precio x{activeTier.qty}
+                        </span>
+                      )}
+                    </div>
+                    {hasDiscount && (
+                      <span className="inline-flex items-center gap-1.5 text-xs text-secondary bg-secondary/10 px-2.5 py-1 rounded-full mt-1">
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>local_offer</span>
+                        Ahorrás ${effectiveSavings.toLocaleString('es-AR')} pagando con transferencia
+                      </span>
+                    )}
+                  </>
+                )
+              })()}
+
+              {/* Volume tier chips */}
+              {product.volumeTiers && product.volumeTiers.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[...product.volumeTiers]
+                    .sort((a, b) => a.qty - b.qty)
+                    .map((tier) => {
+                      const isActive = qty >= tier.qty && getEffectivePrice(product, qty) === tier.price
+                      const pctOff = Math.round((1 - tier.price / product.price) * 100)
+                      return (
+                        <button
+                          key={tier.qty}
+                          onClick={() => setQty(tier.qty)}
+                          className={`flex flex-col items-center px-3 py-2 rounded-xl border-2 transition-all text-left ${
+                            isActive
+                              ? 'border-tertiary bg-tertiary/10 shadow-sm'
+                              : 'border-outline-variant bg-surface hover:border-tertiary/50'
+                          }`}
+                        >
+                          <span className="text-xs font-bold text-on-surface">x{tier.qty} unidades</span>
+                          <span className={`text-sm font-bold ${isActive ? 'text-tertiary' : 'text-secondary'}`}>
+                            ${tier.price.toLocaleString('es-AR')} c/u
+                          </span>
+                          {pctOff > 0 && (
+                            <span className="text-xs text-tertiary font-bold">-{pctOff}%</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
 
             <p className="text-body-md md:text-body-lg text-on-surface-variant mb-6 leading-relaxed whitespace-pre-line">
               {product.description}
             </p>
 
-            <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 mb-4">
               <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${product.stock > 0 ? 'bg-secondary' : 'bg-error'}`} />
               <span className="text-label-sm text-on-surface-variant">
                 {product.stock > 0 ? `${product.stock} unidades disponibles` : 'Sin stock'}
               </span>
+            </div>
+
+            {/* ── Shipping estimate ── */}
+            <div className="mb-5">
+              {shippingZone ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-secondary/5 rounded-lg border border-secondary/20">
+                  <span className="material-symbols-outlined text-secondary flex-shrink-0" style={{ fontSize: '18px' }}>local_shipping</span>
+                  <div className="flex-1 min-w-0 text-sm">
+                    <span className="text-on-surface">
+                      Llega a <strong>{city || province}</strong>:{' '}
+                      <strong className="text-secondary">${shippingZone.cost.toLocaleString('es-AR')}</strong>
+                    </span>
+                    <span className="text-on-surface-variant"> · {shippingZone.days}</span>
+                  </div>
+                  <button
+                    onClick={() => { setPickerProvince(province); setShowLocationPicker(true) }}
+                    className="text-xs text-primary hover:underline flex-shrink-0"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              ) : showLocationPicker ? (
+                <div className="flex gap-2 items-end p-3 bg-surface-container rounded-lg border border-outline-variant/40">
+                  <div className="flex-1">
+                    <label className="text-xs font-bold text-on-surface">Provincia</label>
+                    <select
+                      value={pickerProvince}
+                      onChange={(e) => setPickerProvince(e.target.value)}
+                      className="w-full mt-1 border border-outline-variant rounded-lg px-3 py-2 text-sm bg-surface text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    >
+                      <option value="">Seleccioná...</option>
+                      {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleApplyProvince}
+                    disabled={!pickerProvince}
+                    className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    Ver costo
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowLocationPicker(true)}
+                  className="flex items-center gap-2 text-sm text-primary hover:underline"
+                >
+                  <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '18px' }}>local_shipping</span>
+                  Calculá el costo de envío a tu provincia
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>arrow_forward</span>
+                </button>
+              )}
             </div>
 
             {/* Qty + Buttons — mobile first */}
@@ -280,7 +418,7 @@ export default function ProductDetailPage() {
             <div className="border-t border-outline-variant pt-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
-                  { icon: 'local_shipping', label: `Envío $${shippingCost.toLocaleString('es-AR')} · ${shippingDays}` },
+                  { icon: 'local_shipping', label: shippingZone ? `Envío a ${city || province}: $${shippingZone.cost.toLocaleString('es-AR')}` : 'Envíos a todo Argentina' },
                   { icon: 'verified_user', label: 'Pago 100% seguro' },
                   { icon: 'replay', label: 'Devolución sin problemas' },
                   { icon: 'support_agent', label: 'Soporte dedicado' },

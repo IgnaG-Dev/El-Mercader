@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   useAdminProducts,
   useDeactivateProduct,
@@ -7,7 +7,7 @@ import {
   useDeleteProduct,
 } from '../../hooks/useProducts'
 import { useAdminCategories } from '../../hooks/useCategories'
-import type { Product } from '../../types'
+import type { Product, VolumeTier } from '../../types'
 import type { CreateProductInput } from '../../services/products'
 import Modal from '../../components/ui/Modal'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -47,7 +47,7 @@ const COLUMNS: { label: string; col: string | null }[] = [
 
 const EMPTY_FORM: CreateProductInput = {
   name: '', price: 0, stock: 0, category: '',
-  description: '', badge: '', image_urls: [], active: true,
+  description: '', badge: '', image_urls: [], active: true, volume_tiers: [],
 }
 
 type GroupMode = 'none' | 'category'
@@ -149,6 +149,7 @@ export default function AdminProducts() {
       badge: p.badge ?? '',
       image_urls: p.images?.length ? p.images : (p.image ? [p.image] : []),
       active: p.active ?? true,
+      volume_tiers: p.volumeTiers ?? [],
     })
     setFormError('')
     setEditProduct(p)
@@ -175,6 +176,7 @@ export default function AdminProducts() {
           name: form.name, price: form.price, stock: form.stock,
           active: form.active, badge: form.badge, description: form.description,
           image_urls: form.image_urls ?? [],
+          volume_tiers: form.volume_tiers ?? [],
         },
       })
       setEditProduct(null)
@@ -458,6 +460,106 @@ export default function AdminProducts() {
   )
 }
 
+function VolumeTiersEditor({
+  basePrice,
+  tiers,
+  onChange,
+}: {
+  basePrice: number
+  tiers: VolumeTier[]
+  onChange: (tiers: VolumeTier[]) => void
+}) {
+  const qtyRef = useRef<HTMLInputElement>(null)
+  const priceRef = useRef<HTMLInputElement>(null)
+  const [newQty, setNewQty] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [addError, setAddError] = useState('')
+
+  const sorted = [...tiers].sort((a, b) => a.qty - b.qty)
+
+  const handleAdd = () => {
+    const qty = parseInt(newQty, 10)
+    const price = parseFloat(newPrice)
+    if (!qty || qty < 2) { setAddError('La cantidad mínima es 2.'); return }
+    if (!price || price <= 0) { setAddError('El precio debe ser mayor a 0.'); return }
+    if (price >= basePrice) { setAddError('El precio por volumen debe ser menor al precio base.'); return }
+    if (tiers.some(t => t.qty === qty)) { setAddError(`Ya existe un tier para x${qty}.`); return }
+    setAddError('')
+    onChange([...tiers, { qty, price }])
+    setNewQty('')
+    setNewPrice('')
+    qtyRef.current?.focus()
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-bold text-on-surface-variant mb-2 uppercase tracking-wide">
+        Precios por volumen
+      </label>
+
+      {sorted.length > 0 ? (
+        <div className="space-y-1.5 mb-3">
+          {sorted.map(t => {
+            const pct = basePrice > 0 ? Math.round((1 - t.price / basePrice) * 100) : 0
+            return (
+              <div key={t.qty} className="flex items-center justify-between gap-3 px-3 py-2 bg-surface-container rounded-lg border border-outline-variant/40 text-sm">
+                <span className="font-bold text-on-surface">x{t.qty} unidades</span>
+                <span className="text-secondary font-bold">${t.price.toLocaleString('es-AR')} c/u</span>
+                {pct > 0 && <span className="text-xs text-tertiary font-bold bg-tertiary/10 px-1.5 py-0.5 rounded">-{pct}%</span>}
+                <button
+                  type="button"
+                  onClick={() => onChange(tiers.filter(x => x.qty !== t.qty))}
+                  className="ml-auto text-on-surface-variant hover:text-error transition-colors p-1"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete</span>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-on-surface-variant mb-3 italic">Sin precios por volumen configurados.</p>
+      )}
+
+      {/* Add row */}
+      <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-1 w-24">
+          <label className="text-xs text-on-surface-variant">Cant. mín.</label>
+          <input
+            ref={qtyRef}
+            type="number" min="2" step="1"
+            value={newQty}
+            onChange={e => setNewQty(e.target.value)}
+            placeholder="2"
+            className="w-full border border-outline-variant rounded-lg px-2 py-1.5 text-sm bg-surface focus:outline-none focus:border-primary"
+          />
+        </div>
+        <div className="flex flex-col gap-1 flex-1">
+          <label className="text-xs text-on-surface-variant">Precio c/u (ARS $)</label>
+          <input
+            ref={priceRef}
+            type="number" min="0" step="0.01"
+            value={newPrice}
+            onChange={e => setNewPrice(e.target.value)}
+            placeholder="ej: 90000"
+            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            className="w-full border border-outline-variant rounded-lg px-2 py-1.5 text-sm bg-surface focus:outline-none focus:border-primary"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleAdd}
+          className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors whitespace-nowrap"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>add</span>
+          Agregar
+        </button>
+      </div>
+      {addError && <p className="text-xs text-error mt-1">{addError}</p>}
+    </div>
+  )
+}
+
 function ProductFormModal({
   title, form, setForm, error, loading, onClose, onSubmit, categories,
 }: {
@@ -567,10 +669,16 @@ function ProductFormModal({
               <textarea
                 value={form.description ?? ''}
                 onChange={field('description')}
-                rows={4}
+                rows={3}
                 className="w-full border border-outline-variant rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary resize-none"
               />
             </div>
+
+            <VolumeTiersEditor
+              basePrice={form.price}
+              tiers={form.volume_tiers ?? []}
+              onChange={tiers => setForm(f => ({ ...f, volume_tiers: tiers }))}
+            />
 
             <label className="flex items-center gap-2 cursor-pointer">
               <input

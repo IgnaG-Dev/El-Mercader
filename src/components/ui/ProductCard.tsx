@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Product } from '../../types'
 import { useCartStore } from '../../store/cartStore'
+import { useFinanceStore } from '../../store/financeStore'
 
 interface Props {
   product: Product
@@ -12,6 +13,10 @@ export default function ProductCard({ product }: Props) {
   const [justAdded, setJustAdded] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const navigate = useNavigate()
+  const { paymentMethods, serviceFee } = useFinanceStore()
+  const totalDiscount = paymentMethods.mercadopago.fee + serviceFee
+  const hasDiscount = totalDiscount > 0 && paymentMethods.transfer.enabled
+  const inflatedPrice = hasDiscount ? Math.round(product.price * (1 + totalDiscount / 100)) : product.price
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -50,9 +55,16 @@ export default function ProductCard({ product }: Props) {
               {product.name}
             </h3>
           </Link>
-          <p className="text-body-md text-secondary font-bold mb-3">
-            ${product.price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-          </p>
+          <div className="mb-3">
+            {hasDiscount && (
+              <p className="text-xs line-through text-on-surface-variant/50 leading-tight">
+                ${inflatedPrice.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+              </p>
+            )}
+            <p className="text-body-md text-secondary font-bold">
+              ${product.price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
         </div>
 
         {/* Botones de acción */}

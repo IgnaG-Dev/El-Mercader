@@ -4,9 +4,13 @@ export interface User {
   email: string
   role: 'user' | 'admin'
   avatar?: string
-  guild?: string
   phone?: string
   dni?: string
+}
+
+export interface VolumeTier {
+  qty: number
+  price: number
 }
 
 export interface Product {
@@ -23,6 +27,7 @@ export interface Product {
   rating?: number
   reviews?: number
   active?: boolean
+  volumeTiers?: VolumeTier[]
 }
 
 export interface CartItem {
@@ -57,7 +62,6 @@ export interface GuildMember {
   name: string
   email: string
   role: 'user' | 'admin'
-  guild?: string
   joinedAt: string
   totalOrders: number
   totalSpent: number

@@ -8,7 +8,8 @@ function mapProfile(db: Record<string, unknown>): User {
     email: db.email as string,
     role: db.role as 'user' | 'admin',
     avatar: (db.avatar_url as string) ?? undefined,
-    guild: (db.guild as string) ?? undefined,
+    phone: (db.phone as string) ?? undefined,
+    dni: (db.dni as string) ?? undefined,
   }
 }
 
@@ -25,7 +26,7 @@ export async function fetchProfile(userId: string): Promise<User | null> {
 
 export async function updateProfile(
   userId: string,
-  updates: { name?: string; guild?: string }
+  updates: { name?: string; phone?: string; dni?: string }
 ): Promise<void> {
   const { error } = await supabase.from('profiles').update(updates).eq('id', userId)
   if (error) throw error

@@ -10,6 +10,9 @@ import StorePage from '../pages/public/StorePage'
 import ProductDetailPage from '../pages/public/ProductDetailPage'
 import SearchPage from '../pages/public/SearchPage'
 import CommunityPage from '../pages/public/CommunityPage'
+import ReglasDeJuegoPage from '../pages/public/ReglasDeJuegoPage'
+import PreguntasFrecuentesPage from '../pages/public/PreguntasFrecuentesPage'
+import ContactoPage from '../pages/public/ContactoPage'
 
 // Auth pages
 import LoginPage from '../pages/auth/LoginPage'
@@ -47,6 +50,9 @@ export const router = createBrowserRouter([
       { path: '/producto/:slug', element: <ProductDetailPage /> },
       { path: '/busqueda', element: <SearchPage /> },
       { path: '/comunidad', element: <CommunityPage /> },
+      { path: '/reglas-de-juego', element: <ReglasDeJuegoPage /> },
+      { path: '/preguntas-frecuentes', element: <PreguntasFrecuentesPage /> },
+      { path: '/contacto', element: <ContactoPage /> },
 
       // Auth (no redirect needed — unauthenticated only but keep in public layout)
       { path: '/login', element: <LoginPage /> },

@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { slugify } from '../lib/slugify'
-import type { Product } from '../types'
+import type { Product, VolumeTier } from '../types'
 
 function mapProduct(db: Record<string, unknown>): Product {
   const rawUrls = (db.image_urls as string[] | null) ?? []
@@ -21,6 +21,7 @@ function mapProduct(db: Record<string, unknown>): Product {
     rating: db.rating ? Number(db.rating) : undefined,
     reviews: (db.reviews_count as number) ?? 0,
     active: db.active as boolean,
+    volumeTiers: (db.volume_tiers as VolumeTier[] | null) ?? [],
   }
 }
 
@@ -82,6 +83,7 @@ export async function updateProduct(
     badge?: string
     description?: string
     image_urls?: string[]
+    volume_tiers?: VolumeTier[]
   }
 ): Promise<void> {
   const payload: Record<string, unknown> = { ...updates }
@@ -106,6 +108,7 @@ export interface CreateProductInput {
   badge?: string
   image_urls?: string[]
   active?: boolean
+  volume_tiers?: VolumeTier[]
 }
 
 export async function createProduct(input: CreateProductInput): Promise<Product> {
@@ -123,6 +126,7 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
       image_url: images[0] ?? null,
       image_urls: images,
       active: input.active ?? true,
+      volume_tiers: input.volume_tiers ?? [],
     })
     .select()
     .single()

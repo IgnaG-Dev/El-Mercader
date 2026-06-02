@@ -7,10 +7,11 @@ import {
 } from '../services/addresses'
 import type { Address } from '../types'
 
-export function useAddresses() {
+export function useAddresses(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['addresses'],
     queryFn: fetchAddresses,
+    enabled: options?.enabled !== false,
   })
 }
 
