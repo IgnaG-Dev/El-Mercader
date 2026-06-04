@@ -79,6 +79,10 @@ export default function CheckoutPage() {
     postalCode: '',
   })
   const [formInitialised, setFormInitialised] = useState(false)
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
+  const [showManualForm, setShowManualForm] = useState(false)
+  const [addressPage, setAddressPage] = useState(0)
+  const ADDRESS_PAGE_SIZE = 3
   const defaultMethod = enabledMethods[0]?.[0] ?? 'transfer'
   const [paymentMethod, setPaymentMethod] = useState(defaultMethod)
   const [errors, setErrors] = useState<Partial<ShippingForm & PersonalForm>>({})
@@ -88,12 +92,14 @@ export default function CheckoutPage() {
   const [shippingQuote, setShippingQuote] = useState<ShippingQuote | null>(null)
   const [shippingLoading, setShippingLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const itemsScrollRef = useRef<HTMLDivElement>(null)
 
   // Pre-fill shipping form from saved default address (auth) or locationStore (guest)
   useEffect(() => {
     if (formInitialised) return
     const defaultAddr = addresses?.find((a) => a.isDefault) ?? addresses?.[0]
     if (isAuthenticated && defaultAddr) {
+      setSelectedAddressId(defaultAddr.id)
       setForm({
         street: defaultAddr.street,
         city: defaultAddr.city,
@@ -106,6 +112,10 @@ export default function CheckoutPage() {
         street: defaultAddr.street,
         postalCode: defaultAddr.postalCode,
       })
+      setFormInitialised(true)
+    } else if (isAuthenticated && addresses !== undefined) {
+      // Authenticated but no saved addresses → show manual form
+      setShowManualForm(true)
       setFormInitialised(true)
     } else if (!isAuthenticated && (savedCity || savedProvince)) {
       setForm((prev) => ({
@@ -291,10 +301,18 @@ export default function CheckoutPage() {
     }
   }
 
-  const mpFee = paymentMethod === 'mercadopago' ? Math.round(total * paymentMethods.mercadopago.fee / 100) : 0
-  const serviceFeeSaving = serviceFee > 0 ? Math.round(total * serviceFee / 100) : 0
   const activeShippingCost = shippingQuote?.cost ?? 0
+  // Con MP se agrega la comisión; con transferencia el total es solo productos + envío
+  const mpFee = paymentMethod === 'mercadopago' && paymentMethods.mercadopago.fee > 0
+    ? Math.round(total * paymentMethods.mercadopago.fee / 100)
+    : 0
   const orderTotal = total + activeShippingCost + mpFee
+  const serviceFeeSaving = serviceFee > 0 ? Math.round(total * serviceFee / 100) : 0
+  // El ahorro de MP solo se muestra con transferencia (evitaron la comisión)
+  const mpSaving = paymentMethod === 'transfer' && paymentMethods.mercadopago.fee > 0
+    ? Math.round(total * paymentMethods.mercadopago.fee / 100)
+    : 0
+  const totalQuantity = items.reduce((sum, { quantity }) => sum + quantity, 0)
 
   const inputClass = (field: keyof (ShippingForm & PersonalForm)) =>
     `w-full border rounded-lg px-3 py-2.5 text-body-md bg-surface focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
@@ -401,85 +419,191 @@ export default function CheckoutPage() {
           <SectionCard>
             <SectionTitle icon="local_shipping" label="Datos de envío" />
 
-            {/* Geolocation autocomplete */}
-            <div className="mb-5">
-              <button
-                type="button"
-                onClick={handleGeolocate}
-                disabled={geoLoading}
-                className="flex items-center gap-2 text-sm text-primary font-bold border border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 active:bg-primary/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto justify-center sm:justify-start"
-              >
-                <span
-                  className={`material-symbols-outlined ${geoLoading ? 'animate-spin' : ''}`}
-                  style={{ fontSize: '18px' }}
-                >
-                  {geoLoading ? 'progress_activity' : 'my_location'}
-                </span>
-                {geoLoading ? 'Detectando ubicación...' : 'Usar mi ubicación actual'}
-              </button>
-              {geoError && (
-                <p className="text-xs text-error mt-2 flex items-start gap-1">
-                  <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>error</span>
-                  {geoError}
-                </p>
-              )}
-            </div>
+            {/* ── Saved address cards (authenticated users with addresses) ── */}
+            {isAuthenticated && addresses && addresses.length > 0 && !showManualForm && (
+              <div className="space-y-3">
+                {addresses.slice(addressPage * ADDRESS_PAGE_SIZE, (addressPage + 1) * ADDRESS_PAGE_SIZE).map((addr) => {
+                  const selected = selectedAddressId === addr.id
+                  return (
+                    <label
+                      key={addr.id}
+                      className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${
+                        selected ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-primary/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        value={addr.id}
+                        checked={selected}
+                        onChange={() => {
+                          setSelectedAddressId(addr.id)
+                          setForm({ street: addr.street, city: addr.city, province: addr.province, postalCode: addr.postalCode })
+                          setErrors({})
+                        }}
+                        className="accent-primary mt-0.5 flex-shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <span className="font-bold text-label-bold text-on-surface">{addr.label}</span>
+                          {addr.isDefault && (
+                            <span className="bg-secondary-container text-on-secondary-container text-label-sm font-bold px-2 py-0.5 rounded-full text-xs">Principal</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-on-surface-variant">{addr.street}</p>
+                        <p className="text-xs text-on-surface-variant">{addr.city}, {addr.province} · CP {addr.postalCode}</p>
+                        {selected && shippingQuote && (
+                          <p className="text-xs text-secondary flex items-center gap-1 mt-1.5">
+                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>local_shipping</span>
+                            {shippingQuote.source === 'andreani'
+                              ? <>Costo Andreani:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                              : <>Envío estimado:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                            }
+                            {shippingLoading && <span className="material-symbols-outlined animate-spin ml-1" style={{ fontSize: '12px' }}>progress_activity</span>}
+                          </p>
+                        )}
+                      </div>
+                    </label>
+                  )
+                })}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {/* Calle */}
-              <div className="sm:col-span-2 flex flex-col gap-1">
-                <label className="text-label-sm font-bold text-on-surface">Calle y número *</label>
-                <input value={form.street} onChange={handleField('street')} className={inputClass('street')} placeholder="Av. Corrientes 1234" />
-                {errors.street && <span className="text-xs text-error">{errors.street}</span>}
-              </div>
-
-              {/* Ciudad */}
-              <div className="flex flex-col gap-1">
-                <label className="text-label-sm font-bold text-on-surface">Ciudad *</label>
-                <input value={form.city} onChange={handleField('city')} className={inputClass('city')} placeholder="Buenos Aires" />
-                {errors.city && <span className="text-xs text-error">{errors.city}</span>}
-              </div>
-
-              {/* Código postal */}
-              <div className="flex flex-col gap-1">
-                <label className="text-label-sm font-bold text-on-surface">Código postal *</label>
-                <div className="relative">
-                  <input
-                    value={form.postalCode}
-                    onChange={handleField('postalCode')}
-                    className={inputClass('postalCode')}
-                    placeholder="1043"
-                    inputMode="numeric"
-                  />
-                  {shippingLoading && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined animate-spin text-primary/60" style={{ fontSize: '16px' }}>
-                      progress_activity
+                {/* Pagination */}
+                {addresses.length > ADDRESS_PAGE_SIZE && (
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      disabled={addressPage === 0}
+                      onClick={() => setAddressPage((p) => p - 1)}
+                      className="flex items-center gap-1 text-sm text-secondary font-bold disabled:opacity-30 hover:underline disabled:no-underline"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>chevron_left</span>
+                      Anterior
+                    </button>
+                    <span className="text-xs text-on-surface-variant">
+                      {addressPage + 1} / {Math.ceil(addresses.length / ADDRESS_PAGE_SIZE)}
                     </span>
+                    <button
+                      type="button"
+                      disabled={(addressPage + 1) * ADDRESS_PAGE_SIZE >= addresses.length}
+                      onClick={() => setAddressPage((p) => p + 1)}
+                      className="flex items-center gap-1 text-sm text-secondary font-bold disabled:opacity-30 hover:underline disabled:no-underline"
+                    >
+                      Siguiente
+                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>chevron_right</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Use different address */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAddressId(null)
+                    setForm({ street: '', city: '', province: '', postalCode: '' })
+                    setShowManualForm(true)
+                  }}
+                  className="flex items-center gap-2 text-sm text-secondary font-bold hover:underline mt-1"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add_location_alt</span>
+                  Usar otra dirección
+                </button>
+              </div>
+            )}
+
+            {/* ── Manual form (guests, no addresses, or "otra dirección") ── */}
+            {(!isAuthenticated || !addresses?.length || showManualForm) && (
+              <>
+                {/* Back to saved addresses */}
+                {isAuthenticated && addresses && addresses.length > 0 && showManualForm && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0]
+                      setSelectedAddressId(defaultAddr.id)
+                      setForm({ street: defaultAddr.street, city: defaultAddr.city, province: defaultAddr.province, postalCode: defaultAddr.postalCode })
+                      setShowManualForm(false)
+                    }}
+                    className="flex items-center gap-1.5 text-sm text-secondary font-bold hover:underline mb-5"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_back</span>
+                    Volver a mis direcciones
+                  </button>
+                )}
+
+                {/* Geolocation */}
+                <div className="mb-5">
+                  <button
+                    type="button"
+                    onClick={handleGeolocate}
+                    disabled={geoLoading}
+                    className="flex items-center gap-2 text-sm text-primary font-bold border border-primary/40 rounded-lg px-4 py-2.5 hover:bg-primary/5 active:bg-primary/10 transition-colors disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto justify-center sm:justify-start"
+                  >
+                    <span className={`material-symbols-outlined ${geoLoading ? 'animate-spin' : ''}`} style={{ fontSize: '18px' }}>
+                      {geoLoading ? 'progress_activity' : 'my_location'}
+                    </span>
+                    {geoLoading ? 'Detectando ubicación...' : 'Usar mi ubicación actual'}
+                  </button>
+                  {geoError && (
+                    <p className="text-xs text-error mt-2 flex items-start gap-1">
+                      <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '14px' }}>error</span>
+                      {geoError}
+                    </p>
                   )}
                 </div>
-                {errors.postalCode && <span className="text-xs text-error">{errors.postalCode}</span>}
-              </div>
 
-              {/* Provincia */}
-              <div className="sm:col-span-2 flex flex-col gap-1">
-                <label className="text-label-sm font-bold text-on-surface">Provincia *</label>
-                <select value={form.province} onChange={handleField('province')} className={inputClass('province')}>
-                  <option value="">Seleccioná una provincia</option>
-                  {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-                {errors.province && <span className="text-xs text-error">{errors.province}</span>}
-                {shippingQuote && (
-                  <p className="text-xs text-secondary flex items-center gap-1 mt-1">
-                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>local_shipping</span>
-                    {shippingQuote.source === 'andreani' ? (
-                      <>Costo Andreani:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
-                    ) : (
-                      <>Envío estimado a {form.province}:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="sm:col-span-2 flex flex-col gap-1">
+                    <label className="text-label-sm font-bold text-on-surface">Calle y número *</label>
+                    <input value={form.street} onChange={handleField('street')} className={inputClass('street')} placeholder="Av. Corrientes 1234" />
+                    {errors.street && <span className="text-xs text-error">{errors.street}</span>}
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-label-sm font-bold text-on-surface">Ciudad *</label>
+                    <input value={form.city} onChange={handleField('city')} className={inputClass('city')} placeholder="Buenos Aires" />
+                    {errors.city && <span className="text-xs text-error">{errors.city}</span>}
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-label-sm font-bold text-on-surface">Código postal *</label>
+                    <div className="relative">
+                      <input
+                        value={form.postalCode}
+                        onChange={handleField('postalCode')}
+                        className={inputClass('postalCode')}
+                        placeholder="1043"
+                        inputMode="numeric"
+                      />
+                      {shippingLoading && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 material-symbols-outlined animate-spin text-primary/60" style={{ fontSize: '16px' }}>
+                          progress_activity
+                        </span>
+                      )}
+                    </div>
+                    {errors.postalCode && <span className="text-xs text-error">{errors.postalCode}</span>}
+                  </div>
+
+                  <div className="sm:col-span-2 flex flex-col gap-1">
+                    <label className="text-label-sm font-bold text-on-surface">Provincia *</label>
+                    <select value={form.province} onChange={handleField('province')} className={inputClass('province')}>
+                      <option value="">Seleccioná una provincia</option>
+                      {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    {errors.province && <span className="text-xs text-error">{errors.province}</span>}
+                    {shippingQuote && (
+                      <p className="text-xs text-secondary flex items-center gap-1 mt-1">
+                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>local_shipping</span>
+                        {shippingQuote.source === 'andreani' ? (
+                          <>Costo Andreani:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                        ) : (
+                          <>Envío estimado a {form.province}:&nbsp;<strong>${shippingQuote.cost.toLocaleString('es-AR')}</strong>&nbsp;·&nbsp;{shippingQuote.days}</>
+                        )}
+                      </p>
                     )}
-                  </p>
-                )}
-              </div>
-            </div>
+                  </div>
+                </div>
+              </>
+            )}
           </SectionCard>
 
           {/* Payment */}
@@ -525,7 +649,7 @@ export default function CheckoutPage() {
             <h2 className="font-headline text-xl sm:text-headline-md text-on-surface mb-4">Resumen</h2>
 
             {/* Items */}
-            <div className="space-y-2 sm:space-y-3 mb-4 max-h-40 sm:max-h-48 overflow-y-auto pr-1">
+            <div ref={itemsScrollRef} className="space-y-2 sm:space-y-3 mb-4 max-h-40 sm:max-h-48 overflow-y-auto pr-1">
               {items.map(({ product, quantity }) => (
                 <div key={product.id} className="flex items-center gap-2 sm:gap-3">
                   <img src={product.image} alt="" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded flex-shrink-0" />
@@ -541,16 +665,22 @@ export default function CheckoutPage() {
             </div>
 
             {/* Totals */}
-            <div className="border-t border-outline-variant pt-3 sm:pt-4 space-y-2 mb-4 sm:mb-6">
+            <div className="border-t border-outline-variant pt-3 sm:pt-4 space-y-1.5 mb-4 sm:mb-6">
+
+              {/* Productos */}
               <div className="flex justify-between text-sm text-on-surface-variant">
-                <span>Subtotal</span>
+                <span>
+                  Productos
+                  <span className="text-xs ml-1">({totalQuantity} {totalQuantity === 1 ? 'unidad' : 'unidades'})</span>
+                </span>
                 <span>${total.toLocaleString('es-AR')}</span>
               </div>
 
+              {/* Envío */}
               <div className="flex justify-between text-sm text-on-surface-variant">
-                <span>
+                <span className="flex items-center gap-1">
                   Envío
-                  {shippingQuote && <span className="text-xs ml-1">· {shippingQuote.days}</span>}
+                  {shippingQuote && <span className="text-xs text-on-surface-variant/70">· {shippingQuote.days}</span>}
                 </span>
                 {shippingLoading ? (
                   <span className="text-xs italic text-on-surface-variant/60 flex items-center gap-1">
@@ -564,31 +694,52 @@ export default function CheckoutPage() {
                 )}
               </div>
 
+              {/* Comisión MP visible cuando se elige MP */}
               {mpFee > 0 && (
-                <div className="flex justify-between text-sm text-on-surface-variant">
-                  <span>Comisión MP ({paymentMethods.mercadopago.fee}%)</span>
-                  <span>${mpFee.toLocaleString('es-AR')}</span>
-                </div>
-              )}
-
-              {serviceFeeSaving > 0 && (
-                <div className="flex justify-between text-sm text-secondary">
+                <div className="flex justify-between text-sm text-error/80">
                   <span className="flex items-center gap-1">
-                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>local_offer</span>
-                    Descuento comisión servicio ({serviceFee}%)
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>account_balance_wallet</span>
+                    Comisión Mercado Pago ({paymentMethods.mercadopago.fee}%)
                   </span>
-                  <span>-${serviceFeeSaving.toLocaleString('es-AR')}</span>
+                  <span>+${mpFee.toLocaleString('es-AR')}</span>
                 </div>
               )}
 
-              <div className="flex justify-between font-bold text-base sm:text-headline-md text-on-surface border-t border-outline-variant pt-2">
-                <span>Total</span>
+              {/* Total */}
+              <div className="flex justify-between font-bold text-base sm:text-headline-md text-on-surface border-t border-outline-variant pt-2 mt-1">
+                <span>Total a pagar</span>
                 {shippingQuote ? (
-                  <span>${orderTotal.toLocaleString('es-AR')}</span>
+                  <span className={mpFee > 0 ? 'text-error/80' : ''}>${orderTotal.toLocaleString('es-AR')}</span>
                 ) : (
                   <span className="italic font-normal text-sm text-on-surface-variant/60">A calcular</span>
                 )}
               </div>
+
+              {/* Beneficios informativos */}
+              {(serviceFeeSaving > 0 || mpSaving > 0) && (
+                <div className="mt-1 rounded-xl border border-secondary/25 bg-secondary/8 p-3 space-y-1.5">
+                  <p className="text-xs font-bold text-secondary flex items-center gap-1.5 mb-2">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>savings</span>
+                    Lo que te descontamos al pagar con transferencia
+                  </p>
+                  {serviceFeeSaving > 0 && (
+                    <div className="flex justify-between text-xs text-secondary">
+                      <span>Comisión de servicio ({serviceFee}%)</span>
+                      <span className="font-bold">−${serviceFeeSaving.toLocaleString('es-AR')}</span>
+                    </div>
+                  )}
+                  {mpSaving > 0 && (
+                    <div className="flex justify-between text-xs text-secondary">
+                      <span>Comisión Mercado Pago ({paymentMethods.mercadopago.fee}%)</span>
+                      <span className="font-bold">−${mpSaving.toLocaleString('es-AR')}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xs font-bold text-secondary border-t border-secondary/20 pt-1.5 mt-1">
+                    <span>Total ahorrado</span>
+                    <span>−${(serviceFeeSaving + mpSaving).toLocaleString('es-AR')}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {createOrder.isError && (

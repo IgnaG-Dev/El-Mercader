@@ -203,10 +203,10 @@ export default function AdminProducts() {
   const btnPage = 'px-2.5 py-1.5 rounded text-sm text-on-surface-variant border border-outline-variant/40 hover:bg-surface-container disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-headline text-3xl text-primary font-bold">Administración de Productos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="font-headline text-2xl sm:text-3xl text-primary font-bold">Administración de Productos</h1>
         <Button size="sm" onClick={openCreate}>
           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add</span>
           Nuevo producto
@@ -277,7 +277,8 @@ export default function AdminProducts() {
 
       {/* Table */}
       <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px]">
           <thead className="bg-surface-container-highest">
             <tr>
               {COLUMNS.map(({ label, col }) => (
@@ -359,6 +360,7 @@ export default function AdminProducts() {
             ))}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination */}
         {filtered.length > 0 && (

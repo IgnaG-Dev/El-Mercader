@@ -184,7 +184,10 @@ export default function ProductDetailPage() {
   const mpFee = paymentMethods.mercadopago.fee
   const totalDiscount = mpFee + serviceFee
   const hasDiscount = totalDiscount > 0 && paymentMethods.transfer.enabled
-  const inflatedPrice = hasDiscount ? Math.round(product.price * (1 + totalDiscount / 100)) : product.price
+  const serviceSaving = (units: number, unitPrice: number) =>
+    serviceFee > 0 ? Math.round(unitPrice * units * serviceFee / 100) : 0
+  const mpSaving = (units: number, unitPrice: number) =>
+    mpFee > 0 ? Math.round(unitPrice * units * mpFee / 100) : 0
 
   const SITE_URL = 'https://elmercader.com.ar'
   const productUrl = `${SITE_URL}/producto/${product.slug}`
@@ -379,12 +382,15 @@ export default function ProductDetailPage() {
                 const effectiveUnit = getEffectivePrice(product, qty)
                 const activeTier = product.volumeTiers?.find(t => t.price === effectiveUnit && effectiveUnit !== product.price)
                 const effectiveInflated = hasDiscount ? Math.round(effectiveUnit * (1 + totalDiscount / 100)) : effectiveUnit
-                const effectiveSavings = effectiveInflated - effectiveUnit
+                const svcSave = serviceSaving(qty, effectiveUnit)
+                const mpSave = mpSaving(qty, effectiveUnit)
+                const totalSave = svcSave + mpSave
                 return (
                   <>
                     {hasDiscount && (
                       <p className="text-sm line-through text-on-surface-variant/60 mb-0.5">
                         ${effectiveInflated.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        <span className="text-xs ml-1">c/u</span>
                       </p>
                     )}
                     <div className="flex items-baseline gap-2 flex-wrap">
@@ -399,11 +405,31 @@ export default function ProductDetailPage() {
                         </span>
                       )}
                     </div>
-                    {hasDiscount && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-secondary bg-secondary/10 px-2.5 py-1 rounded-full mt-1">
-                        <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>local_offer</span>
-                        Ahorrás ${effectiveSavings.toLocaleString('es-AR')} pagando con transferencia
-                      </span>
+
+                    {/* Bloque de ahorros informativo */}
+                    {hasDiscount && totalSave > 0 && (
+                      <div className="mt-2 rounded-xl border border-secondary/25 bg-secondary/8 p-3 space-y-1">
+                        <p className="text-xs font-bold text-secondary flex items-center gap-1.5 mb-1.5">
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>savings</span>
+                          Lo que te descontamos{qty > 1 ? ` (x${qty})` : ''} al pagar con transferencia
+                        </p>
+                        {svcSave > 0 && (
+                          <div className="flex justify-between text-xs text-secondary">
+                            <span>Comisión de servicio ({serviceFee}%)</span>
+                            <span className="font-bold">−${svcSave.toLocaleString('es-AR')}</span>
+                          </div>
+                        )}
+                        {mpSave > 0 && (
+                          <div className="flex justify-between text-xs text-secondary">
+                            <span>Comisión Mercado Pago ({mpFee}%)</span>
+                            <span className="font-bold">−${mpSave.toLocaleString('es-AR')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs font-bold text-secondary border-t border-secondary/20 pt-1.5 mt-1">
+                          <span>Total ahorrado</span>
+                          <span>−${totalSave.toLocaleString('es-AR')}</span>
+                        </div>
+                      </div>
                     )}
                   </>
                 )
@@ -440,17 +466,26 @@ export default function ProductDetailPage() {
                     ¿Comprás más de uno?
                   </p>
                   <div className="flex gap-2 flex-wrap">
-                    {[2, 3].filter((n) => n <= product.stock).map((n) => (
-                      <button key={n} onClick={() => setQty(n)}
-                        className={`flex-1 flex flex-col items-center px-4 py-2 rounded-xl border-2 transition-all ${
-                          qty === n ? 'border-primary bg-primary/10 shadow-sm' : 'border-outline-variant bg-surface hover:border-primary/40'
-                        }`}
-                      >
-                        <span className="text-xs text-on-surface-variant">x{n} unidades</span>
-                        <span className="text-sm font-bold text-secondary">${(product.price * n).toLocaleString('es-AR')}</span>
-                        <span className="text-xs text-on-surface-variant">total</span>
-                      </button>
-                    ))}
+                    {[2, 3].filter((n) => n <= product.stock).map((n) => {
+                      const bundleTotal = product.price * n
+                      const bundleSave = serviceSaving(n, product.price) + mpSaving(n, product.price)
+                      return (
+                        <button key={n} onClick={() => setQty(n)}
+                          className={`flex-1 flex flex-col items-center px-4 py-2 rounded-xl border-2 transition-all ${
+                            qty === n ? 'border-primary bg-primary/10 shadow-sm' : 'border-outline-variant bg-surface hover:border-primary/40'
+                          }`}
+                        >
+                          <span className="text-xs text-on-surface-variant">x{n} unidades</span>
+                          <span className="text-sm font-bold text-secondary">${bundleTotal.toLocaleString('es-AR')}</span>
+                          <span className="text-xs text-on-surface-variant">total</span>
+                          {hasDiscount && bundleSave > 0 && (
+                            <span className="text-xs text-secondary font-bold mt-0.5">
+                              −${bundleSave.toLocaleString('es-AR')} ahorrado
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -670,11 +705,9 @@ export default function ProductDetailPage() {
               <span className="material-symbols-outlined text-primary" style={{ fontSize: '22px' }}>history</span>
               Vistos recientemente
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-gutter">
               {recentlyViewedProducts.map((p) => (
-                <div key={p.id} className="flex-shrink-0 w-40 sm:w-48">
-                  <ProductCard product={p} />
-                </div>
+                <ProductCard key={p.id} product={p} />
               ))}
             </div>
           </div>
@@ -714,7 +747,14 @@ export default function ProductDetailPage() {
             <img src={product.image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-outline-variant/30" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-on-surface line-clamp-1">{product.name}</p>
-              <p className="text-sm font-bold text-secondary">${getEffectivePrice(product, qty).toLocaleString('es-AR')}</p>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-sm font-bold text-secondary">
+                  ${(getEffectivePrice(product, qty) * qty).toLocaleString('es-AR')}
+                </p>
+                {qty > 1 && (
+                  <span className="text-xs text-on-surface-variant">x{qty}</span>
+                )}
+              </div>
             </div>
             <button onClick={handleAddToCart}
               className="flex-shrink-0 bg-primary text-on-primary font-bold px-4 py-2.5 rounded-lg text-sm flex items-center gap-1.5 hover:bg-primary/90 active:scale-95 transition-all">

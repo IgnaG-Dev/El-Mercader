@@ -227,7 +227,7 @@ export default function AdminReports() {
   const totalInventoryValue = useMemo(() => products.reduce((s, p) => s + p.price * p.stock, 0), [products])
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <h1 className="font-headline text-3xl text-primary font-bold">Informes Avanzados</h1>
 
       {/* ── KPI row ── */}
@@ -404,7 +404,8 @@ export default function AdminReports() {
           ) : topProducts.length === 0 ? (
             <p className="p-6 text-sm text-on-surface-variant">Sin ventas aún</p>
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px]">
               <thead className="bg-surface-container-highest/50">
                 <tr>
                   {['#','Producto','Vendido','Ingresos'].map(h => (
@@ -428,6 +429,7 @@ export default function AdminReports() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 
@@ -442,7 +444,8 @@ export default function AdminReports() {
           ) : recentOrders.length === 0 ? (
             <p className="p-6 text-sm text-on-surface-variant">Sin pedidos aún</p>
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[360px]">
               <thead className="bg-surface-container-highest/50">
                 <tr>
                   {['ID','Fecha','Total','Estado'].map(h => (
@@ -471,6 +474,7 @@ export default function AdminReports() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

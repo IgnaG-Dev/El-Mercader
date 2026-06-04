@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   fetchAddresses,
   createAddress,
+  updateAddress,
   setDefaultAddress,
   deleteAddress,
 } from '../services/addresses'
@@ -19,6 +20,15 @@ export function useCreateAddress() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (addr: Omit<Address, 'id'>) => createAddress(addr),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['addresses'] }),
+  })
+}
+
+export function useUpdateAddress() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, addr }: { id: string; addr: Partial<Omit<Address, 'id'>> }) =>
+      updateAddress(id, addr),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['addresses'] }),
   })
 }

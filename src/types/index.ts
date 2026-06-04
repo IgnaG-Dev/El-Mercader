@@ -63,6 +63,7 @@ export interface GuildMember {
   name: string
   email: string
   role: 'user' | 'admin'
+  guild?: string
   joinedAt: string
   totalOrders: number
   totalSpent: number

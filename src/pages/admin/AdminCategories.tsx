@@ -84,9 +84,9 @@ export default function AdminCategories() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-headline text-3xl text-primary font-bold">Categorías</h1>
           <p className="text-sm text-on-surface-variant mt-1">
@@ -101,7 +101,8 @@ export default function AdminCategories() {
 
       {/* Table */}
       <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px]">
           <thead className="bg-surface-container-highest">
             <tr>
               {['Orden', 'Ícono', 'Nombre', 'Slug', 'Descripción', 'Estado', 'Acciones'].map(h => (
@@ -165,6 +166,7 @@ export default function AdminCategories() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Info box */}

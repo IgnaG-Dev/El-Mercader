@@ -7,13 +7,14 @@ interface OrderItemRow {
   product_image: string
   quantity: number
   unit_price: number
+  products: { slug: string } | null
 }
 
 function mapOrder(db: Record<string, unknown>): Order {
   const items = ((db.order_items as OrderItemRow[]) ?? []).map((item) => ({
     product: {
       id: item.product_id,
-      slug: '',
+      slug: item.products?.slug ?? '',
       name: item.product_name,
       price: Number(item.unit_price),
       image: item.product_image ?? '',
@@ -55,7 +56,7 @@ export interface CreateOrderInput {
 export async function fetchUserOrders(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*)')
+    .select('*, order_items(*, products:product_id(slug))')
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -97,7 +98,7 @@ export async function createOrder(input: CreateOrderInput): Promise<string> {
 export async function fetchAllOrdersAdmin(): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*)')
+    .select('*, order_items(*, products:product_id(slug))')
     .order('created_at', { ascending: false })
 
   if (error) throw error

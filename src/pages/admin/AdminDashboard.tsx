@@ -44,8 +44,8 @@ export default function AdminDashboard() {
   const topProducts = products.slice(0, 5)
 
   return (
-    <div className="p-8">
-      <h1 className="font-headline text-headline-lg text-primary mb-8">Vista General</h1>
+    <div className="p-4 sm:p-6 lg:p-8">
+      <h1 className="font-headline text-headline-md sm:text-headline-lg text-primary mb-6 lg:mb-8">Vista General</h1>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">

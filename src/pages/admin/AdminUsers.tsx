@@ -120,10 +120,10 @@ export default function AdminUsers() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-headline text-3xl text-primary font-bold">Usuarios</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="font-headline text-2xl sm:text-3xl text-primary font-bold">Usuarios</h1>
         <Button size="sm" onClick={() => { setCreateForm({ name: '', email: '', password: '', role: 'user' }); setCreateError(''); setShowCreate(true) }}>
           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>person_add</span>
           Nuevo usuario
@@ -159,7 +159,8 @@ export default function AdminUsers() {
 
       {/* Table */}
       <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead className="bg-surface-container-highest">
             <tr>
               {['Miembro', 'Email', 'Contacto', 'Rol', 'Acciones'].map(h => (
@@ -225,6 +226,7 @@ export default function AdminUsers() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* View Modal */}

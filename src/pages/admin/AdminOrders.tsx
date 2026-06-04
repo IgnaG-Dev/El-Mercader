@@ -194,10 +194,10 @@ export default function AdminOrders() {
   const viewCustomerEmail = viewProfile?.email ?? viewAddr?.email
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-headline text-3xl text-primary font-bold">Gestión de Pedidos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="font-headline text-2xl sm:text-3xl text-primary font-bold">Gestión de Pedidos</h1>
         <Button size="sm" onClick={() => { setNewOrder(EMPTY_ORDER); setNewItems([]); setCreateError(''); setShowCreate(true) }}>
           <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>add</span>
           Nuevo pedido
@@ -241,7 +241,7 @@ export default function AdminOrders() {
 
       {/* Table */}
       <div className="bg-surface-container rounded-xl border border-outline-variant/30 overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[700px]">
           <thead className="bg-surface-container-highest">
             <tr>
               {COLS.map(col => (
